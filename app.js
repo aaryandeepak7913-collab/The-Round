@@ -180,14 +180,34 @@ const timerRoundInfo = document.getElementById("timerRoundInfo");
 const startTimerBtn = document.getElementById("startTimerBtn");
 const pauseTimerBtn = document.getElementById("pauseTimerBtn");
 const resetTimerBtn = document.getElementById("resetTimerBtn");
+const timerExerciseInput = document.getElementById("timerExerciseName");
+const timerVoiceMicBtn = document.getElementById("timerVoiceMicBtn");
 
 function getTimerInputs() {
   return {
+    exerciseName: timerExerciseInput ? timerExerciseInput.value.trim() : "",
     prepSec: parseInt(document.getElementById("prepTime").value, 10) || 0,
     workSec: (parseFloat(document.getElementById("workTime").value) || 25) * 60,
     restSec: (parseFloat(document.getElementById("restTime").value) || 5) * 60,
     totalRounds: parseInt(document.getElementById("totalRounds").value, 10) || 1
   };
+}
+
+/* Voice input helper specifically for timer exercise label */
+if (timerVoiceMicBtn) {
+  timerVoiceMicBtn.addEventListener("click", () => {
+    if (!voiceSupported()) { toast("Voice recognition isn't available in this browser."); return; }
+    const rec = initRecognizer();
+    timerVoiceMicBtn.classList.add("listening");
+    toast("Say your planned exercise name...");
+    rec.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      if (timerExerciseInput) timerExerciseInput.value = transcript;
+      toast(`Exercise set to: "${transcript}"`);
+    };
+    rec.onend = () => timerVoiceMicBtn.classList.remove("listening");
+    rec.start();
+  });
 }
 
 function formatTime(seconds) {
@@ -200,7 +220,8 @@ function updateTimerDisplay() {
   timerClock.textContent = formatTime(state.timer.secondsRemaining);
   timerPhase.textContent = state.timer.phase;
   const config = getTimerInputs();
-  timerRoundInfo.textContent = `Round ${state.timer.currentRound} / ${config.totalRounds}`;
+  const nameLabel = config.exerciseName ? ` (${config.exerciseName})` : "";
+  timerRoundInfo.textContent = `Round ${state.timer.currentRound} / ${config.totalRounds}${nameLabel}`;
 
   timerPanel.classList.remove("phase-prep", "phase-work", "phase-rest");
   if (state.timer.status !== "stopped") {
@@ -291,13 +312,13 @@ function autoLogTimerSession(config) {
   const entry = {
     id: uid(),
     type: "boxing",
-    name: "Boxing Pomodoro Session",
+    name: config.exerciseName || "Boxing Pomodoro Session",
     rounds: config.totalRounds,
     roundLength: config.workSec / 60
   };
   state.draftEntries.push(entry);
   renderEntriesList();
-  toast("Auto-logged boxing pomodoro to current session!");
+  toast(`Auto-logged "${entry.name}" to current session!`);
 }
 
 startTimerBtn.addEventListener("click", startTimer);
