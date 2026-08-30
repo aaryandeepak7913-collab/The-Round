@@ -4,17 +4,19 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#121415" />
-<title>Rounds — training log</title>
+<title>Rounds — Boxing & Pomodoro Tracker</title>
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icons/icon-192.png" />
 <link rel="apple-touch-icon" href="icons/icon-192.png" />
 <link rel="stylesheet" href="style.css" />
 </head>
-<body>
+<body class="boxing-theme">
 
   <header class="topbar">
     <div class="brand">
-      <span class="brand-ring"></span>
+      <svg class="glove-icon pulse-glove" viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+        <path d="M19 10c0-3.87-3.13-7-7-7-3.53 0-6.43 2.61-6.92 6H5c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h.17c.96 2.36 3.27 4 5.97 4h3.72c2.8 0 5.14-1.78 6.01-4.25.09-.24.13-.5.13-.75V10zM9 18c-1.66 0-3-1.34-3-3v-1h2v1c0 .55.45 1 1 1h.5v2H9z"/>
+      </svg>
       <span class="brand-text">ROUNDS</span>
     </div>
     <div class="streak-card" id="streakCard">
@@ -27,6 +29,49 @@
   </header>
 
   <main class="content">
+    <!-- TIMER SECTION -->
+    <section class="timer-panel" id="timerPanel">
+      <div class="timer-header">
+        <svg class="glove-icon" viewBox="0 0 24 24" width="28" height="28" fill="var(--rope-red-bright)">
+          <path d="M19 10c0-3.87-3.13-7-7-7-3.53 0-6.43 2.61-6.92 6H5c-1.1 0-2 .9-2 2v3c0 1.1.9 2 2 2h.17c.96 2.36 3.27 4 5.97 4h3.72c2.8 0 5.14-1.78 6.01-4.25.09-.24.13-.5.13-.75V10z"/>
+        </svg>
+        <h2 id="timerModeTitle">BOXING POMODORO</h2>
+      </div>
+
+      <div class="timer-display-container">
+        <div class="timer-ring-bg"></div>
+        <div class="timer-phase" id="timerPhase">READY</div>
+        <div class="timer-clock" id="timerClock">00:00</div>
+        <div class="timer-round-info" id="timerRoundInfo">Round 1 / 4</div>
+      </div>
+
+      <div class="timer-controls">
+        <button class="btn-primary btn-boxing" id="startTimerBtn">START ROUND</button>
+        <button class="btn-secondary" id="pauseTimerBtn">PAUSE</button>
+        <button class="btn-danger" id="resetTimerBtn">RESET</button>
+      </div>
+
+      <div class="timer-settings-grid">
+        <div class="setting-item">
+          <label for="prepTime">Prep (sec)</label>
+          <input type="number" id="prepTime" value="10" min="0" step="5" />
+        </div>
+        <div class="setting-item">
+          <label for="workTime">Work (min)</label>
+          <input type="number" id="workTime" value="25" min="1" step="1" />
+        </div>
+        <div class="setting-item">
+          <label for="restTime">Rest (min)</label>
+          <input type="number" id="restTime" value="5" min="1" step="1" />
+        </div>
+        <div class="setting-item">
+          <label for="totalRounds">Rounds</label>
+          <input type="number" id="totalRounds" value="4" min="1" step="1" />
+        </div>
+      </div>
+    </section>
+
+    <!-- CALENDAR SECTION -->
     <section class="calendar-panel">
       <div class="calendar-header">
         <button class="nav-btn" id="prevMonth">‹</button>
@@ -45,6 +90,7 @@
       </div>
     </section>
 
+    <!-- LOG PANEL -->
     <section class="log-panel" id="logPanel">
       <div class="log-empty" id="logEmpty">
         <p>Pick a day to see what happened, or log today's round.</p>
@@ -77,13 +123,13 @@
         <div class="manual-add">
           <div class="manual-row">
             <select id="manualType">
+              <option value="boxing">Boxing</option>
               <option value="strength">Strength</option>
               <option value="cardio">Cardio</option>
-              <option value="boxing">Boxing</option>
             </select>
-            <input type="text" id="manualName" placeholder="e.g. Bench press, Roadwork, Sparring" />
+            <input type="text" id="manualName" placeholder="e.g. Heavy Bag, Pomodoro Session" />
           </div>
-          <div class="manual-row" id="manualStrengthRow">
+          <div class="manual-row hidden" id="manualStrengthRow">
             <input type="number" id="manualSets" placeholder="Sets" min="0" />
             <input type="number" id="manualReps" placeholder="Reps" min="0" />
             <input type="number" id="manualWeight" placeholder="Weight" min="0" step="0.5" />
@@ -94,7 +140,7 @@
             <select id="manualDistanceUnit"><option value="km">km</option><option value="mi">mi</option></select>
             <input type="number" id="manualDuration" placeholder="Minutes" min="0" />
           </div>
-          <div class="manual-row hidden" id="manualBoxingRow">
+          <div class="manual-row" id="manualBoxingRow">
             <input type="number" id="manualRounds" placeholder="Rounds" min="0" />
             <input type="number" id="manualRoundLength" placeholder="Round length (min)" min="0" step="0.5" />
           </div>
@@ -114,7 +160,6 @@
     </section>
   </main>
 
-  <!-- Voice review modal -->
   <section id="voiceReview" class="drawer hidden">
     <div class="drawer-card">
       <div class="drawer-header">
@@ -127,7 +172,6 @@
     </div>
   </section>
 
-  <!-- Settings drawer -->
   <section id="settingsDrawer" class="drawer hidden">
     <div class="drawer-card">
       <div class="drawer-header">
