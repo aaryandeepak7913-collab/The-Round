@@ -46,6 +46,38 @@ async function idbDelete(key) {
 }
 
 /* =========================================================
+   AUDIO (BOXING BELL SYNTHESIZER)
+   ========================================================= */
+let audioCtx = null;
+
+function playBoxingBell() {
+  if (!audioCtx) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AudioContext();
+  }
+  if (audioCtx.state === "suspended") {
+    audioCtx.resume();
+  }
+
+  const now = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(800, now);
+  osc.frequency.exponentialRampToValueAtTime(400, now + 1.2);
+
+  gain.gain.setValueAtTime(0.8, now);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start(now);
+  osc.stop(now + 1.2);
+}
+
+/* =========================================================
    STATE
    ========================================================= */
 const state = {
@@ -53,8 +85,15 @@ const state = {
   streak: { current: 0, longest: 0, lastDate: null },
   selectedDate: null,
   calendarMonth: new Date(),
-  draftEntries: [],     // entries being built for the currently open day, before save
+  draftEntries: [],     // entries being built for currently open day
   voiceReviewDrafts: [],
+  timer: {
+    status: "stopped",  // "stopped" | "running" | "paused"
+    phase: "PREP",      // "PREP" | "WORK" | "REST"
+    currentRound: 1,
+    secondsRemaining: 0,
+    intervalId: null
+  }
 };
 
 function todayStr() { return localDateStr(new Date()); }
@@ -70,7 +109,7 @@ function addDays(dateStr, n) {
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
 /* =========================================================
-   PERSISTENCE
+   PERSISTENCE & STREAK
    ========================================================= */
 async function loadSessions() {
   const saved = await idbGet("sessions");
@@ -80,9 +119,6 @@ async function saveSessions() {
   await idbSet("sessions", state.sessions);
 }
 
-/* =========================================================
-   STREAK CALC
-   ========================================================= */
 function recomputeStreak() {
   const dates = Object.keys(state.sessions).filter(d => (state.sessions[d].entries || []).length > 0).sort();
   if (dates.length === 0) {
@@ -111,6 +147,140 @@ function isWithinCurrentStreak(dateStr) {
   }
   return false;
 }
+
+/* =========================================================
+   BOXING POMODORO TIMER LOGIC
+   ========================================================= */
+const timerPanel = document.getElementById("timerPanel");
+const timerClock = document.getElementById("timerClock");
+const timerPhase = document.getElementById("timerPhase");
+const timerRoundInfo = document.getElementById("timerRoundInfo");
+const startTimerBtn = document.getElementById("startTimerBtn");
+const pauseTimerBtn = document.getElementById("pauseTimerBtn");
+const resetTimerBtn = document.getElementById("resetTimerBtn");
+
+function getTimerInputs() {
+  return {
+    prepSec: parseInt(document.getElementById("prepTime").value, 10) || 0,
+    workSec: (parseFloat(document.getElementById("workTime").value) || 25) * 60,
+    restSec: (parseFloat(document.getElementById("restTime").value) || 5) * 60,
+    totalRounds: parseInt(document.getElementById("totalRounds").value, 10) || 1
+  };
+}
+
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function updateTimerDisplay() {
+  timerClock.textContent = formatTime(state.timer.secondsRemaining);
+  timerPhase.textContent = state.timer.phase;
+  const config = getTimerInputs();
+  timerRoundInfo.textContent = `Round ${state.timer.currentRound} / ${config.totalRounds}`;
+
+  timerPanel.classList.remove("phase-prep", "phase-work", "phase-rest");
+  if (state.timer.status !== "stopped") {
+    timerPanel.classList.add(`phase-${state.timer.phase.toLowerCase()}`);
+  }
+}
+
+function startTimer() {
+  const config = getTimerInputs();
+  if (state.timer.status === "stopped") {
+    state.timer.currentRound = 1;
+    if (config.prepSec > 0) {
+      state.timer.phase = "PREP";
+      state.timer.secondsRemaining = config.prepSec;
+    } else {
+      state.timer.phase = "WORK";
+      state.timer.secondsRemaining = config.workSec;
+    }
+    playBoxingBell();
+  }
+  
+  state.timer.status = "running";
+  startTimerBtn.textContent = "RESUME";
+  startTimerBtn.disabled = true;
+  pauseTimerBtn.disabled = false;
+
+  clearInterval(state.timer.intervalId);
+  state.timer.intervalId = setInterval(tickTimer, 1000);
+  updateTimerDisplay();
+}
+
+function pauseTimer() {
+  state.timer.status = "paused";
+  clearInterval(state.timer.intervalId);
+  startTimerBtn.disabled = false;
+  pauseTimerBtn.disabled = true;
+}
+
+function resetTimer() {
+  clearInterval(state.timer.intervalId);
+  state.timer.status = "stopped";
+  state.timer.phase = "READY";
+  state.timer.currentRound = 1;
+  state.timer.secondsRemaining = 0;
+  
+  startTimerBtn.textContent = "START ROUND";
+  startTimerBtn.disabled = false;
+  pauseTimerBtn.disabled = false;
+  
+  updateTimerDisplay();
+  timerClock.textContent = "00:00";
+}
+
+function tickTimer() {
+  if (state.timer.secondsRemaining > 0) {
+    state.timer.secondsRemaining--;
+    updateTimerDisplay();
+    return;
+  }
+
+  playBoxingBell();
+  const config = getTimerInputs();
+
+  if (state.timer.phase === "PREP") {
+    state.timer.phase = "WORK";
+    state.timer.secondsRemaining = config.workSec;
+  } else if (state.timer.phase === "WORK") {
+    if (state.timer.currentRound < config.totalRounds) {
+      state.timer.phase = "REST";
+      state.timer.secondsRemaining = config.restSec;
+    } else {
+      // Finished all rounds
+      resetTimer();
+      toast("Session Complete! Great fight!");
+      autoLogTimerSession(config);
+      return;
+    }
+  } else if (state.timer.phase === "REST") {
+    state.timer.currentRound++;
+    state.timer.phase = "WORK";
+    state.timer.secondsRemaining = config.workSec;
+  }
+  updateTimerDisplay();
+}
+
+function autoLogTimerSession(config) {
+  if (!state.selectedDate) selectDate(todayStr());
+  const entry = {
+    id: uid(),
+    type: "boxing",
+    name: "Boxing Pomodoro Session",
+    rounds: config.totalRounds,
+    roundLength: config.workSec / 60
+  };
+  state.draftEntries.push(entry);
+  renderEntriesList();
+  toast("Auto-logged boxing pomodoro to current session!");
+}
+
+startTimerBtn.addEventListener("click", startTimer);
+pauseTimerBtn.addEventListener("click", pauseTimer);
+resetTimerBtn.addEventListener("click", resetTimer);
 
 /* =========================================================
    TOAST
@@ -335,7 +505,6 @@ function parseWorkoutPhrase(text) {
 
   const entry = { id: uid(), type: "strength", name: null, note: null, transcript: original };
 
-  // weight: "60 kg" / "60 kilos" / "135 lbs" / "135 pounds"
   let m = t.match(/(\d+(?:\.\d+)?)\s*(kg|kilo|kilos|kilogram|kilograms)\b/);
   if (m) { entry.weight = parseFloat(m[1]); entry.weightUnit = "kg"; t = t.replace(m[0], " "); }
   else {
@@ -343,7 +512,6 @@ function parseWorkoutPhrase(text) {
     if (m) { entry.weight = parseFloat(m[1]); entry.weightUnit = "lb"; t = t.replace(m[0], " "); }
   }
 
-  // sets x reps: "3x10", "3 sets of 10", "3 sets 10 reps"
   m = t.match(/(\d+)\s*(?:x|sets?\s*(?:of)?)\s*(\d+)\s*(?:reps?)?/);
   if (m) { entry.sets = parseInt(m[1]); entry.reps = parseInt(m[2]); t = t.replace(m[0], " "); }
   else {
@@ -353,13 +521,11 @@ function parseWorkoutPhrase(text) {
     if (m) { entry.reps = parseInt(m[1]); t = t.replace(m[0], " "); }
   }
 
-  // rounds: "6 rounds" / "6 round"
   m = t.match(/(\d+)\s*rounds?\b/);
   if (m) { entry.rounds = parseInt(m[1]); t = t.replace(m[0], " "); }
   m = t.match(/(\d+(?:\.\d+)?)\s*min(?:ute)?s?\s*(?:round|rounds|each)/);
   if (m) { entry.roundLength = parseFloat(m[1]); t = t.replace(m[0], " "); }
 
-  // distance: "5k", "5 km", "2 miles"
   m = t.match(/(\d+(?:\.\d+)?)\s*k(?:m|ilometers?)?\b/);
   if (m) { entry.distance = parseFloat(m[1]); entry.distanceUnit = "km"; t = t.replace(m[0], " "); }
   else {
@@ -367,18 +533,15 @@ function parseWorkoutPhrase(text) {
     if (m) { entry.distance = parseFloat(m[1]); entry.distanceUnit = "mi"; t = t.replace(m[0], " "); }
   }
 
-  // duration: "20 minutes" / "5 mins" / "30 seconds"
   m = t.match(/(\d+(?:\.\d+)?)\s*(?:minutes?|mins?)\b/);
   if (m) { entry.duration = parseFloat(m[1]); t = t.replace(m[0], " "); }
 
-  // classify type
   const lower = original.toLowerCase();
   if (BOXING_WORDS.some((w) => lower.includes(w))) entry.type = "boxing";
   else if (CARDIO_WORDS.some((w) => lower.includes(w)) || entry.distance) entry.type = "cardio";
   else if (entry.rounds || entry.roundLength) entry.type = "boxing";
   else entry.type = "strength";
 
-  // whatever text remains (minus filler words/numbers) becomes the name
   let name = t.replace(/\b(at|of|for|and|then|a|an|the|with|did|do|done)\b/g, " ")
                .replace(/\d+/g, " ")
                .replace(/\s+/g, " ")
@@ -395,10 +558,10 @@ function splitIntoPhrases(text) {
     .filter((s) => s.length > 2);
 }
 
-/* ---- speech recognition setup ---- */
+/* ---- Speech recognition setup ---- */
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognizer = null;
-let voiceMode = null; // 'summary' | 'live'
+let voiceMode = null; 
 
 function voiceSupported() { return !!SpeechRecognitionAPI; }
 
@@ -488,11 +651,11 @@ document.getElementById("voiceQuickBtn").addEventListener("click", () => {
   startSummaryMode();
 });
 
-/* ---- voice review modal ---- */
+/* ---- Voice review modal ---- */
 function openVoiceReview() {
   const list = document.getElementById("voiceReviewList");
   list.innerHTML = "";
-  state.voiceReviewDrafts.forEach((e, idx) => {
+  state.voiceReviewDrafts.forEach((e) => {
     const card = document.createElement("div");
     card.className = "voice-review-item";
 
