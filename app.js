@@ -62,12 +62,11 @@ function playBoxingBell() {
     audioCtx.resume();
   }
 
-  const strikeTimes = [0, 0.25, 0.5]; // 3 rapid bell strikes
+  const strikeTimes = [0, 0.25, 0.5];
 
   strikeTimes.forEach((delay) => {
     const startTime = audioCtx.currentTime + delay;
 
-    // Fundamental metal tone
     const primaryOsc = audioCtx.createOscillator();
     const primaryGain = audioCtx.createGain();
     primaryOsc.type = "sine";
@@ -82,7 +81,6 @@ function playBoxingBell() {
     primaryOsc.start(startTime);
     primaryOsc.stop(startTime + 1.2);
 
-    // High harmonic ring
     const overtoneOsc = audioCtx.createOscillator();
     const overtoneGain = audioCtx.createGain();
     overtoneOsc.type = "sine";
@@ -206,8 +204,9 @@ const timerExerciseInput = document.getElementById("timerExerciseName");
 const timerVoiceMicBtn = document.getElementById("timerVoiceMicBtn");
 
 function getTimerInputs() {
+  const nameInput = timerExerciseInput ? timerExerciseInput.value.trim() : "";
   return {
-    exerciseName: timerExerciseInput ? timerExerciseInput.value.trim() : "",
+    exerciseName: nameInput !== "" ? nameInput : "Boxing Session",
     prepSec: parseInt(document.getElementById("prepTime").value, 10) || 0,
     workSec: (parseFloat(document.getElementById("workTime").value) || 3) * 60,
     restSec: (parseFloat(document.getElementById("restTime").value) || 1) * 60,
@@ -215,13 +214,12 @@ function getTimerInputs() {
   };
 }
 
-// Voice mic helper specifically for naming timer drills
 if (timerVoiceMicBtn) {
   timerVoiceMicBtn.addEventListener("click", () => {
     if (!voiceSupported()) { toast("Voice recognition isn't available in this browser."); return; }
     const rec = initRecognizer();
     timerVoiceMicBtn.classList.add("listening");
-    toast("Say your planned exercise name...");
+    toast("Say your exercise name...");
     rec.onresult = (e) => {
       const transcript = e.results[0][0].transcript;
       if (timerExerciseInput) timerExerciseInput.value = transcript;
@@ -242,8 +240,7 @@ function updateTimerDisplay() {
   timerClock.textContent = formatTime(state.timer.secondsRemaining);
   timerPhase.textContent = state.timer.phase;
   const config = getTimerInputs();
-  const nameLabel = config.exerciseName ? ` (${config.exerciseName})` : "";
-  timerRoundInfo.textContent = `Round ${state.timer.currentRound} / ${config.totalRounds}${nameLabel}`;
+  timerRoundInfo.textContent = `Round ${state.timer.currentRound} / ${config.totalRounds} (${config.exerciseName})`;
 
   timerPanel.classList.remove("phase-prep", "phase-work", "phase-rest");
   if (state.timer.status !== "stopped") {
@@ -335,7 +332,7 @@ async function autoLogTimerSession(config) {
   const entry = {
     id: uid(),
     type: "boxing",
-    name: config.exerciseName || "Boxing Pomodoro Session",
+    name: config.exerciseName,
     rounds: config.totalRounds,
     roundLength: config.workSec / 60
   };
@@ -343,7 +340,6 @@ async function autoLogTimerSession(config) {
   state.draftEntries.push(entry);
   renderEntriesList();
 
-  // Commit immediately to local storage and update streak
   state.sessions[dateStr] = {
     entries: state.draftEntries,
     notes: document.getElementById("sessionNotes")?.value || "",
@@ -354,7 +350,7 @@ async function autoLogTimerSession(config) {
   await saveSessions();
   updateStreakUI();
   renderCalendar();
-  toast(`Auto-logged "${entry.name}" & updated streak! 🔥`);
+  toast(`Logged "${entry.name}" & updated streak! 🔥`);
 }
 
 startTimerBtn.addEventListener("click", startTimer);
@@ -556,7 +552,7 @@ document.getElementById("saveLogBtn").addEventListener("click", async () => {
 /* =========================================================
    VOICE PARSER & HANDLERS
    ========================================================= */
-const BOXING_WORDS = ["spar","sparring","pads","pad work","bag work","heavy bag","shadow box","shadow boxing","roadwork","skipping","jump rope","mitts","drill"];
+const BOXING_WORDS = ["spar","sparring","pads","pad work","bag work","heavy bag","shadow box","shadow boxing","roadwork","skipping","jump rope","mitts","drill","speedbag"];
 const CARDIO_WORDS = ["run","ran","running","jog","jogging","cycle","cycling","bike","biking","swim","swimming","row","rowing","walk","walking"];
 
 function parseWorkoutPhrase(text) {
