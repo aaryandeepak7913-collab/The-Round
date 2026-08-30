@@ -1,53 +1,46 @@
-# Rounds — training log
 
-A voice-logged workout tracker with a streak system, built the same way as Keep: a PWA that installs on Windows and Android, works fully offline, no accounts or servers involved. Everything lives on your device.
+🥊 Rounds — Boxing & Pomodoro Tracker
+A lightweight, local-first Progressive Web App (PWA) that combines a customizable Boxing Pomodoro Timer with an automated workout logger, streak tracker, and voice input support.
+✨ Features
+ * Customizable Boxing Timer
+   * Set custom work intervals, rest periods, prep countdowns, and total rounds.
+   * Custom Exercise Naming: Name your drill directly in the timer (e.g., Skipping, Heavy Bag, Shadowboxing, Speedbag) via text or voice input.
+   * Audio Cues: Custom triple-strike boxing bell synthesizes in real-time via the Web Audio API (no external sound files required).
+ * Automated Workout Logging
+   * Completing all timer rounds automatically logs the completed session straight to your daily log under your specified exercise name.
+ * Streak & Activity Tracking
+   * Tracks active day streaks, best overall streaks, and total workout days.
+   * Interactive month calendar with daily activity markers and streak highlights.
+ * Voice-Enabled Logging
+   * Quick Exercise Name: Tap the microphone next to the timer input to set your drill name hands-free.
+   * Summary Mode: Speak your full workout at the end of a session to auto-parse exercises, sets, reps, weight, and distance.
+   * Live Mode: Keep the mic open to log sets continuously as you perform them.
+ * Local-First & Offline Ready
+   * Built using native IndexedDB for persistent offline storage.
+   * Zero external API dependencies or backend servers required.
+🚀 Quick Start
+1. Running Locally
+Simply clone the repository and open index.html in any modern web browser:
+git clone https://github.com/aaryandeepak7913-collab/The-Round.git
+cd The-Round
 
-## What it tracks
+Open index.html directly or serve it using a simple local server:
+# Using Python
+python3 -m http.server 8000
 
-- **Strength**: exercise, sets, reps, weight
-- **Cardio**: activity, distance, duration
-- **Boxing**: activity (sparring, pads, bag work, roadwork, shadow boxing, skipping), rounds, round length
-- A free-text note per session for how it felt
+Navigate to http://localhost:8000 in your browser.
+2. Live Demo
+Visit the live GitHub Pages app: Rounds — Boxing & Pomodoro
+🛠️ Project Structure
+├── index.html     # App layout, CSS variables, modal drawers, and main UI panels
+├── app.js         # Core logic: Audio engine, timer tick, IndexedDB, streak system, voice parser
+├── sw.js          # Service worker for offline asset caching
+└── manifest.json  # Web App Manifest for PWA installation
 
-## Voice logging — two modes
-
-**Speak a summary** — say your whole session in one go after you're done, e.g. *"Bench press 3 sets of 10 at 60 kilos, then 20 minutes roadwork, then 6 rounds sparring."* It splits on "then"/"and"/commas, guesses the type, numbers, and exercise name for each part, and shows you an editable review card before anything saves. Nothing is saved without you confirming it.
-
-**Log live** — tap it once, then speak each set as you finish it: *"bench press 10 reps 60 kilos"* → appears in the list right away. Tap again to stop. Good for between-set logging without touching your phone.
-
-Voice parsing is pattern-based, not true AI — it looks for numbers next to words like "kg," "reps," "rounds," "minutes," "km," and known boxing terms. It's decent at typical phrasing but won't be perfect, which is exactly why every voice entry is editable before it's saved, and everything can also be typed in manually below the voice buttons.
-
-**Browser support**: voice recognition needs Chrome or Edge (desktop or Android). It won't appear as an option in browsers that don't support it — manual entry always works everywhere.
-
-## Streaks
-
-A day counts the moment it has at least one logged entry. Current streak, longest streak, and total rounds logged are shown at the bottom of the calendar panel.
-
-## Installing
-
-Same as Keep:
-
-1. Host the files somewhere with HTTPS (GitHub Pages, same as before, or a new repo).
-2. Open the URL in Chrome/Edge → install icon in the address bar (Windows) or "Add to Home screen" (Android).
-
-No Google Cloud setup needed this time — there's no cloud sync in this version, so nothing to configure before it works.
-
-## What's not in yet
-
-This is the first pass. Not included yet, on purpose, so the core (voice logging + streaks + calendar) shipped fast and workable:
-
-- Cloud sync between devices (can be added the same way Keep's Drive sync was, if wanted)
-- Editing a saved entry's details after adding it (right now: remove and re-add)
-- Charts/progress graphs over time
-- Exporting your log
-
-## Files
-
-| File | Purpose |
-|---|---|
-| `index.html` | App shell |
-| `style.css` | Visual design |
-| `app.js` | Storage, calendar, streaks, voice parsing |
-| `manifest.json` | Makes it installable |
-| `sw.js` | Offline support — bump `CACHE_NAME` here after any future update, same as with Keep |
-| `icons/` | App icons |
+📖 How to Use
+ * Set Up Your Round:
+   * Enter your drill name in the EXERCISE NAME field (e.g., Heavy Bag).
+   * Adjust your PREP (SEC), WORK (MIN), REST (MIN), and ROUNDS.
+ * Start Training: Click START ROUND. The bell will sound, and the card will switch between PREP, WORK, and REST states.
+ * Auto-Save: Once the final round finishes, the app automatically adds the entry to your selected date's log and updates your active streak.
+ * Manual & Voice Logging: Click Open Today's Log to manually add strength, cardio, or boxing drills, or use Summary Voice / Log Live to speak your stats.
