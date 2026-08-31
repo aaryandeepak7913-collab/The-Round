@@ -1,248 +1,182 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Rounds Tracker & Boxing Pomodoro</title>
-  <style>
-    :root {
-      --bg: #121214;
-      --card-bg: #1e1e24;
-      --border: #2e2e38;
-      --accent: #ff4757;
-      --accent-hover: #ff6b81;
-      --text: #f1f2f6;
-      --text-muted: #a4b0be;
-      --prep-color: #eccc68;
-      --work-color: #ff4757;
-      --rest-color: #2ed573;
-    }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; font-family: system-ui, -apple-system, sans-serif; }
-    body { background: var(--bg); color: var(--text); padding: 16px; max-width: 600px; margin: 0 auto; line-height: 1.5; }
-    header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    h1, h2, h3 { color: var(--text); font-weight: 700; }
-    
-    .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 20px; }
-    .btn { background: var(--accent); color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-    .btn:hover { background: var(--accent-hover); }
-    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn-secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
-    .btn-secondary:hover { background: var(--border); }
-    
-    input, select, textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 8px 12px; border-radius: 6px; margin-top: 4px; margin-bottom: 12px; }
-    
-    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; text-align: center; }
-    .stat-val { font-size: 1.5rem; font-weight: 800; color: var(--accent); }
-    .stat-lbl { font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase; }
-
-    .timer-card { text-align: center; transition: border-color 0.3s; }
-    .timer-display { font-size: 3.5rem; font-weight: 900; font-family: monospace; margin: 10px 0; }
-    .phase-badge { font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); }
-    .timer-card.phase-prep { border-color: var(--prep-color); }
-    .timer-card.phase-prep .phase-badge { color: var(--prep-color); }
-    .timer-card.phase-work { border-color: var(--work-color); }
-    .timer-card.phase-work .phase-badge { color: var(--work-color); }
-    .timer-card.phase-rest { border-color: var(--rest-color); }
-    .timer-card.phase-rest .phase-badge { color: var(--rest-color); }
-    .timer-controls { display: flex; gap: 8px; justify-content: center; margin-top: 12px; }
-    
-    .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
-    .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; text-align: center; }
-    .cal-day { aspect-ratio: 1; border: 1px solid var(--border); background: var(--bg); border-radius: 6px; color: var(--text); display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; font-size: 0.85rem; }
-    .cal-day.empty { border: none; background: transparent; cursor: default; }
-    .cal-day.today { border-color: var(--accent); font-weight: bold; }
-    .cal-day.has-entry { background: #2a2a35; }
-    .cal-day.selected { outline: 2px solid var(--text); }
-    .cal-day.streak-day { border-bottom: 3px solid var(--accent); }
-    .cal-day .dot { width: 4px; height: 4px; background: var(--accent); border-radius: 50%; position: absolute; bottom: 4px; }
-    
-    .entry-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg); padding: 8px 12px; border-radius: 6px; margin-bottom: 6px; }
-    .entry-tag { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; margin-right: 8px; }
-    .entry-tag.strength { background: #3742fa; }
-    .entry-tag.cardio { background: #2ed573; color: #000; }
-    .entry-tag.boxing { background: #ff4757; }
-    .entry-detail { flex-grow: 1; font-size: 0.9rem; }
-    .entry-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; }
-    
-    .hidden { display: none !important; }
-    .voice-btn-group { display: flex; gap: 8px; margin-bottom: 12px; }
-    .listening { animation: pulse 1.5s infinite; background: var(--accent) !important; color: white !important; }
-    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-    
-    #toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #fff; color: #000; padding: 8px 16px; border-radius: 20px; font-weight: 600; font-size: 0.85rem; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 1000; }
-    .drawer { position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 999; padding: 16px; }
-    .drawer-content { background: var(--card-bg); width: 100%; max-width: 500px; border-radius: 12px; padding: 20px; max-height: 90vh; overflow-y: auto; }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0D0E0F" />
+<title>Rounds — training log</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="style.css" />
 </head>
-<body>
+<body class="boxing-theme">
 
-  <header>
-    <h1>Rounds</h1>
-    <div>
-      <button id="voiceQuickBtn" class="btn btn-secondary">⚡ Quick Log</button>
-      <button id="settingsBtn" class="btn btn-secondary">⚙️</button>
+  <header class="topbar">
+    <div class="brand">
+      <span class="glove-icon pulse-glove">🥊</span>
+      <span class="brand-text">ROUNDS</span>
+    </div>
+    <div class="streak-card" id="streakCard">
+      <span class="streak-num" id="streakCount">0</span>
+      <span class="streak-label">round streak</span>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="voiceQuickBtn" title="Quick voice log">🎙</button>
+      <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
     </div>
   </header>
 
-  <!-- STREAKS & STATS -->
-  <section class="card">
-    <div class="stats-grid">
-      <div>
-        <div id="streakCount" class="stat-val">0</div>
-        <div class="stat-lbl">Day Streak 🔥</div>
+  <main class="content">
+
+    <!-- ROUND TIMER -->
+    <section id="timerPanel" class="timer-panel">
+      <div class="timer-header">
+        <span class="glove-icon">🔔</span>
+        <h2>ROUND TIMER</h2>
       </div>
-      <div>
-        <div id="longestStreakStat" class="stat-val">0</div>
-        <div class="stat-lbl">Best Streak</div>
+
+      <div class="timer-display-container">
+        <div id="timerPhase" class="timer-phase">READY</div>
+        <div id="timerClock" class="timer-clock">00:00</div>
+        <div id="timerRoundInfo" class="timer-round-info">Round 1 / 1</div>
       </div>
-      <div>
-        <div id="totalSessionsStat" class="stat-val">0</div>
-        <div class="stat-lbl">Total Days</div>
+
+      <div class="timer-name-row">
+        <input type="text" id="timerExerciseName" placeholder="e.g. Heavy bag, Shadowboxing, Sparring" />
+        <button type="button" id="timerVoiceMicBtn" class="icon-btn timer-mic" title="Speak exercise name">🎤</button>
+      </div>
+
+      <div class="timer-controls">
+        <button id="startTimerBtn" class="btn-primary btn-boxing">START ROUND</button>
+        <button id="pauseTimerBtn" class="btn-secondary" disabled>PAUSE</button>
+        <button id="resetTimerBtn" class="btn-secondary">RESET</button>
+      </div>
+
+      <div class="timer-settings-grid">
+        <div class="setting-item"><label>Prep (sec)</label><input type="number" id="prepTime" value="10" min="0" /></div>
+        <div class="setting-item"><label>Work (min)</label><input type="number" id="workTime" value="3" min="0" step="0.5" /></div>
+        <div class="setting-item"><label>Rest (min)</label><input type="number" id="restTime" value="1" min="0" step="0.5" /></div>
+        <div class="setting-item"><label>Rounds</label><input type="number" id="totalRounds" value="3" min="1" /></div>
+      </div>
+    </section>
+
+    <section class="calendar-panel">
+      <div class="calendar-header">
+        <button class="nav-btn" id="prevMonth">‹</button>
+        <h2 id="monthLabel">Month Year</h2>
+        <button class="nav-btn" id="nextMonth">›</button>
+      </div>
+      <div class="weekday-row">
+        <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+
+      <div class="record-card">
+        <div><span class="stat-num" id="currentStreakStat">0</span><span class="stat-label">current streak</span></div>
+        <div><span class="stat-num" id="longestStreakStat">0</span><span class="stat-label">best streak</span></div>
+        <div><span class="stat-num" id="totalSessionsStat">0</span><span class="stat-label">rounds logged</span></div>
+      </div>
+    </section>
+
+    <section class="log-panel" id="logPanel">
+      <div class="log-empty" id="logEmpty">
+        <p>Pick a day to see what happened, or log today's round.</p>
+        <div class="empty-actions">
+          <button class="btn-primary" id="logTodayBtn">Log today</button>
+          <button class="btn-voice" id="voiceQuickBtnInline">
+            <span class="mic-dot"></span> Speak it
+          </button>
+        </div>
+      </div>
+
+      <div class="log-editor hidden" id="logEditor">
+        <div class="log-header">
+          <h3 id="logDateLabel">Today</h3>
+          <button class="icon-btn" id="closeLogBtn">✕</button>
+        </div>
+
+        <div class="voice-bar">
+          <button class="voice-btn" id="voiceSummaryBtn"><span class="mic-dot"></span> Speak a summary</button>
+          <button class="voice-btn" id="voiceLiveBtn"><span class="mic-dot"></span> Log live</button>
+          <span class="voice-status" id="voiceStatus"></span>
+        </div>
+
+        <div class="entries-list" id="entriesList"></div>
+
+        <div class="manual-add">
+          <div class="manual-row">
+            <select id="manualType">
+              <option value="boxing">Boxing</option>
+              <option value="strength">Strength</option>
+              <option value="cardio">Cardio</option>
+            </select>
+            <input type="text" id="manualName" placeholder="e.g. Sparring, Bench press, Roadwork" />
+          </div>
+          <div class="manual-row hidden" id="manualStrengthRow">
+            <input type="number" id="manualSets" placeholder="Sets" min="0" />
+            <input type="number" id="manualReps" placeholder="Reps" min="0" />
+            <input type="number" id="manualWeight" placeholder="Weight" min="0" step="0.5" />
+            <select id="manualWeightUnit"><option value="kg">kg</option><option value="lb">lb</option></select>
+          </div>
+          <div class="manual-row hidden" id="manualCardioRow">
+            <input type="number" id="manualDistance" placeholder="Distance" min="0" step="0.1" />
+            <select id="manualDistanceUnit"><option value="km">km</option><option value="mi">mi</option></select>
+            <input type="number" id="manualDuration" placeholder="Minutes" min="0" />
+          </div>
+          <div class="manual-row" id="manualBoxingRow">
+            <input type="number" id="manualRounds" placeholder="Rounds" min="0" />
+            <input type="number" id="manualRoundLength" placeholder="Round length (min)" min="0" step="0.5" />
+          </div>
+          <div class="manual-row">
+            <input type="text" id="manualNote" placeholder="Notes (optional)" />
+            <button class="btn-secondary" id="manualAddBtn">Add entry</button>
+          </div>
+        </div>
+
+        <textarea id="sessionNotes" placeholder="How did it feel? Anything to remember for next time."></textarea>
+
+        <div class="log-footer">
+          <span class="save-status" id="saveStatus"></span>
+          <button class="btn-primary" id="saveLogBtn">Save round</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Voice review modal -->
+  <section id="voiceReview" class="drawer hidden">
+    <div class="drawer-card">
+      <div class="drawer-header">
+        <h2>Here's what I heard</h2>
+        <button class="icon-btn" id="closeVoiceReviewBtn">✕</button>
+      </div>
+      <p class="muted">Check these before saving — voice parsing isn't perfect. Tap any field to fix it.</p>
+      <div id="voiceReviewList"></div>
+      <button class="btn-primary" id="confirmVoiceEntriesBtn">Add these to today's round</button>
+    </div>
+  </section>
+
+  <!-- Settings drawer -->
+  <section id="settingsDrawer" class="drawer hidden">
+    <div class="drawer-card">
+      <div class="drawer-header">
+        <h2>Settings</h2>
+        <button class="icon-btn" id="closeSettingsBtn">✕</button>
+      </div>
+      <div class="settings-block">
+        <h3>Voice recognition</h3>
+        <p class="muted" id="voiceSupportStatus">Checking device support…</p>
+      </div>
+      <div class="settings-block danger-block">
+        <h3>Danger zone</h3>
+        <p class="muted">Erases every logged round on this device. This can't be undone.</p>
+        <button class="btn-danger" id="wipeDataBtn">Erase all data</button>
       </div>
     </div>
   </section>
 
-  <!-- BOXING POMODORO TIMER PANEL -->
-  <section id="timerPanel" class="card timer-card">
-    <div id="timerPhase" class="phase-badge">READY</div>
-    <div id="timerClock" class="timer-display">00:00</div>
-    <div id="timerRoundInfo" style="font-size: 0.85rem; color: var(--text-muted);">Round 1 / 1</div>
-
-    <div style="margin-top: 16px; text-align: left;">
-      <label style="font-size: 0.8rem; color: var(--text-muted); font-weight: 600;">EXERCISE NAME</label>
-      <div style="display: flex; gap: 8px; margin-top: 4px;">
-        <input type="text" id="timerExerciseName" placeholder="e.g. Skipping, Heavy Bag, Shadowboxing, Speedbag" style="margin-bottom: 8px;" />
-        <button type="button" id="timerVoiceMicBtn" class="btn btn-secondary" style="height: 38px;" title="Voice speak exercise name">🎤</button>
-      </div>
-
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; font-size: 0.75rem;">
-        <div>
-          <label>PREP (SEC)</label>
-          <input type="number" id="prepTime" value="10" />
-        </div>
-        <div>
-          <label>WORK (MIN)</label>
-          <input type="number" id="workTime" value="3" step="0.5" />
-        </div>
-        <div>
-          <label>REST (MIN)</label>
-          <input type="number" id="restTime" value="1" step="0.5" />
-        </div>
-        <div>
-          <label>ROUNDS</label>
-          <input type="number" id="totalRounds" value="3" />
-        </div>
-      </div>
-    </div>
-
-    <div class="timer-controls">
-      <button id="startTimerBtn" class="btn">START ROUND</button>
-      <button id="pauseTimerBtn" class="btn btn-secondary" disabled>PAUSE</button>
-      <button id="resetTimerBtn" class="btn btn-secondary">RESET</button>
-    </div>
-  </section>
-
-  <!-- CALENDAR -->
-  <section class="card">
-    <div class="cal-header">
-      <button id="prevMonth" class="btn btn-secondary">&lt;</button>
-      <strong id="monthLabel">Month Year</strong>
-      <button id="nextMonth" class="btn btn-secondary">&gt;</button>
-    </div>
-    <div id="calendarGrid" class="cal-grid"></div>
-    <div style="margin-top: 12px; text-align: center;">
-      <button id="logTodayBtn" class="btn btn-secondary" style="width: 100%;">Open Today's Log</button>
-    </div>
-  </section>
-
-  <!-- LOG EDITOR -->
-  <section id="logEditor" class="card hidden">
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-      <h3 id="logDateLabel">Date</h3>
-      <button id="closeLogBtn" class="btn btn-secondary">✕</button>
-    </div>
-
-    <div class="voice-btn-group">
-      <button id="voiceSummaryBtn" class="btn btn-secondary" style="flex: 1;">🎙️ Summary Voice</button>
-      <button id="voiceLiveBtn" class="btn btn-secondary" style="flex: 1;">🎙️ Log Live</button>
-    </div>
-    <div id="voiceStatus" style="font-size: 0.8rem; color: var(--accent); margin-bottom: 8px;"></div>
-
-    <div id="entriesList"></div>
-
-    <!-- Manual Add Entry Form -->
-    <div style="border-top: 1px solid var(--border); padding-top: 12px; margin-top: 12px;">
-      <div style="display: flex; gap: 8px;">
-        <select id="manualType" style="width: 30%;">
-          <option value="boxing">Boxing</option>
-          <option value="strength">Strength</option>
-          <option value="cardio">Cardio</option>
-        </select>
-        <input type="text" id="manualName" placeholder="Exercise name" style="flex-grow: 1;" />
-      </div>
-
-      <div id="manualStrengthRow" class="hidden" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
-        <input type="number" id="manualSets" placeholder="Sets" />
-        <input type="number" id="manualReps" placeholder="Reps" />
-        <input type="number" id="manualWeight" placeholder="Weight" />
-        <select id="manualWeightUnit"><option value="kg">kg</option><option value="lb">lb</option></select>
-      </div>
-
-      <div id="manualCardioRow" class="hidden" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
-        <input type="number" id="manualDistance" placeholder="Distance" />
-        <select id="manualDistanceUnit"><option value="km">km</option><option value="mi">mi</option></select>
-        <input type="number" id="manualDuration" placeholder="Mins" />
-      </div>
-
-      <div id="manualBoxingRow" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px;">
-        <input type="number" id="manualRounds" placeholder="Rounds" />
-        <input type="number" id="manualRoundLength" placeholder="Mins/round" />
-      </div>
-
-      <input type="text" id="manualNote" placeholder="Optional notes" />
-      <button id="manualAddBtn" class="btn btn-secondary" style="width: 100%;">+ Add Entry</button>
-    </div>
-
-    <div style="margin-top: 12px;">
-      <textarea id="sessionNotes" placeholder="Daily journal / notes..." rows="2"></textarea>
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <button id="saveLogBtn" class="btn">Save Day</button>
-        <span id="saveStatus" style="font-size: 0.75rem; color: var(--text-muted);"></span>
-      </div>
-    </div>
-  </section>
-
-  <div id="logEmpty" class="card" style="text-align: center; color: var(--text-muted);">
-    Select a day on the calendar or click "Open Today's Log" to view or add details.
-  </div>
-
-  <!-- VOICE REVIEW MODAL -->
-  <div id="voiceReview" class="drawer hidden">
-    <div class="drawer-content">
-      <h3>Review Voice Entries</h3>
-      <div id="voiceReviewList" style="margin: 12px 0;"></div>
-      <div style="display: flex; gap: 8px;">
-        <button id="confirmVoiceEntriesBtn" class="btn" style="flex: 1;">Confirm & Add</button>
-        <button id="closeVoiceReviewBtn" class="btn btn-secondary">Cancel</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- SETTINGS DRAWER -->
-  <div id="settingsDrawer" class="drawer hidden">
-    <div class="drawer-content">
-      <h3>Settings</h3>
-      <p style="font-size: 0.85rem; color: var(--text-muted); margin: 8px 0;">
-        Speech Recognition: <span id="voiceSupportStatus">Checking...</span>
-      </p>
-      <button id="wipeDataBtn" class="btn" style="background: #d63031; width: 100%; margin-top: 12px;">Wipe All Data</button>
-      <button id="closeSettingsBtn" class="btn btn-secondary" style="width: 100%; margin-top: 8px;">Close</button>
-    </div>
-  </div>
-
-  <!-- TOAST NOTIFICATION -->
-  <div id="toast" class="hidden"></div>
+  <div class="toast hidden" id="toast"></div>
 
   <script src="app.js"></script>
 </body>
