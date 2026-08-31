@@ -1,12 +1,12 @@
 {
   "name": "Rounds — training log",
   "short_name": "Rounds",
-  "description": "Voice-logged workout tracker with streaks, for boxing, strength, and cardio.",
+  "description": "Voice-logged workout tracker with a round timer and streaks, for boxing, strength, and cardio.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#121415",
-  "theme_color": "#121415",
+  "background_color": "#0D0E0F",
+  "theme_color": "#0D0E0F",
   "orientation": "portrait-primary",
   "icons": [
     { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
