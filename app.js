@@ -17,7 +17,6 @@ function openDB() {
     req.onerror = () => reject(req.error);
   });
 }
-
 async function idbGet(key) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -27,7 +26,6 @@ async function idbGet(key) {
     req.onerror = () => reject(req.error);
   });
 }
-
 async function idbSet(key, value) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -37,7 +35,6 @@ async function idbSet(key, value) {
     tx.onerror = () => reject(tx.error);
   });
 }
-
 async function idbDelete(key) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
@@ -49,7 +46,7 @@ async function idbDelete(key) {
 }
 
 /* =========================================================
-   AUDIO ENGINE (TRIPLE-STRIKE BOXING BELL)
+   AUDIO ENGINE — TRIPLE-STRIKE BOXING BELL
    ========================================================= */
 let audioCtx = null;
 
@@ -58,12 +55,9 @@ function playBoxingBell() {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     audioCtx = new AudioContext();
   }
-  if (audioCtx.state === "suspended") {
-    audioCtx.resume();
-  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
 
   const strikeTimes = [0, 0.25, 0.5];
-
   strikeTimes.forEach((delay) => {
     const startTime = audioCtx.currentTime + delay;
 
@@ -72,10 +66,8 @@ function playBoxingBell() {
     primaryOsc.type = "sine";
     primaryOsc.frequency.setValueAtTime(850, startTime);
     primaryOsc.frequency.exponentialRampToValueAtTime(420, startTime + 1.2);
-
     primaryGain.gain.setValueAtTime(0.7, startTime);
     primaryGain.gain.exponentialRampToValueAtTime(0.001, startTime + 1.2);
-
     primaryOsc.connect(primaryGain);
     primaryGain.connect(audioCtx.destination);
     primaryOsc.start(startTime);
@@ -86,10 +78,8 @@ function playBoxingBell() {
     overtoneOsc.type = "sine";
     overtoneOsc.frequency.setValueAtTime(2150, startTime);
     overtoneOsc.frequency.exponentialRampToValueAtTime(1100, startTime + 0.6);
-
     overtoneGain.gain.setValueAtTime(0.3, startTime);
     overtoneGain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.6);
-
     overtoneOsc.connect(overtoneGain);
     overtoneGain.connect(audioCtx.destination);
     overtoneOsc.start(startTime);
@@ -98,77 +88,57 @@ function playBoxingBell() {
 }
 
 /* =========================================================
-   STATE MANAGEMENT & HELPERS
+   STATE
    ========================================================= */
 const state = {
-  sessions: {},         // { "YYYY-MM-DD": { entries: [...], notes: "", updatedAt } }
+  sessions: {},
   streak: { current: 0, longest: 0, lastDate: null },
   selectedDate: null,
   calendarMonth: new Date(),
   draftEntries: [],
   voiceReviewDrafts: [],
   timer: {
-    status: "stopped",  // "stopped" | "running" | "paused"
-    phase: "READY",      // "READY" | "PREP" | "WORK" | "REST"
+    status: "stopped",
+    phase: "READY",
     currentRound: 1,
     secondsRemaining: 0,
-    intervalId: null
-  }
+    intervalId: null,
+  },
 };
 
 function todayStr() { return localDateStr(new Date()); }
-
 function localDateStr(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, "0"), day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-
 function addDays(dateStr, n) {
   const d = new Date(dateStr + "T00:00:00");
   d.setDate(d.getDate() + n);
   return localDateStr(d);
 }
-
 function uid() { return Math.random().toString(36).slice(2, 10); }
 
 /* =========================================================
-   PERSISTENCE & STREAK SYSTEM
+   PERSISTENCE & STREAKS
    ========================================================= */
 async function loadSessions() {
   const saved = await idbGet("sessions");
   state.sessions = saved || {};
 }
-
-async function saveSessions() {
-  await idbSet("sessions", state.sessions);
-}
+async function saveSessions() { await idbSet("sessions", state.sessions); }
 
 function recomputeStreak() {
-  const dates = Object.keys(state.sessions)
-    .filter(d => (state.sessions[d].entries || []).length > 0)
-    .sort();
-
-  if (dates.length === 0) {
-    state.streak = { current: 0, longest: 0, lastDate: null };
-    return;
-  }
-
+  const dates = Object.keys(state.sessions).filter((d) => (state.sessions[d].entries || []).length > 0).sort();
+  if (dates.length === 0) { state.streak = { current: 0, longest: 0, lastDate: null }; return; }
   const dateSet = new Set(dates);
   let longest = 1, run = 1;
-
   for (let i = 1; i < dates.length; i++) {
     run = addDays(dates[i - 1], 1) === dates[i] ? run + 1 : 1;
     longest = Math.max(longest, run);
   }
-
   let cursor = dateSet.has(todayStr()) ? todayStr() : addDays(todayStr(), -1);
   let current = 0;
-  while (dateSet.has(cursor)) {
-    current++;
-    cursor = addDays(cursor, -1);
-  }
+  while (dateSet.has(cursor)) { current++; cursor = addDays(cursor, -1); }
   state.streak = { current, longest, lastDate: dates[dates.length - 1] };
 }
 
@@ -185,13 +155,26 @@ function isWithinCurrentStreak(dateStr) {
 
 function updateStreakUI() {
   document.getElementById("streakCount").textContent = state.streak.current;
+  document.getElementById("currentStreakStat").textContent = state.streak.current;
   document.getElementById("longestStreakStat").textContent = state.streak.longest;
-  const total = Object.values(state.sessions).filter(s => (s.entries || []).length > 0).length;
+  const total = Object.values(state.sessions).filter((s) => (s.entries || []).length > 0).length;
   document.getElementById("totalSessionsStat").textContent = total;
 }
 
 /* =========================================================
-   BOXING POMODORO TIMER LOGIC
+   TOAST
+   ========================================================= */
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById("toast");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add("hidden"), 2600);
+}
+
+/* =========================================================
+   ROUND TIMER
    ========================================================= */
 const timerPanel = document.getElementById("timerPanel");
 const timerClock = document.getElementById("timerClock");
@@ -206,41 +189,25 @@ const timerVoiceMicBtn = document.getElementById("timerVoiceMicBtn");
 function getTimerInputs() {
   const nameInput = timerExerciseInput ? timerExerciseInput.value.trim() : "";
   return {
-    exerciseName: nameInput !== "" ? nameInput : "Boxing Session",
+    exerciseName: nameInput !== "" ? nameInput : "Boxing session",
     prepSec: parseInt(document.getElementById("prepTime").value, 10) || 0,
     workSec: (parseFloat(document.getElementById("workTime").value) || 3) * 60,
     restSec: (parseFloat(document.getElementById("restTime").value) || 1) * 60,
-    totalRounds: parseInt(document.getElementById("totalRounds").value, 10) || 1
+    totalRounds: parseInt(document.getElementById("totalRounds").value, 10) || 1,
   };
-}
-
-if (timerVoiceMicBtn) {
-  timerVoiceMicBtn.addEventListener("click", () => {
-    if (!voiceSupported()) { toast("Voice recognition isn't available in this browser."); return; }
-    const rec = initRecognizer();
-    timerVoiceMicBtn.classList.add("listening");
-    toast("Say your exercise name...");
-    rec.onresult = (e) => {
-      const transcript = e.results[0][0].transcript;
-      if (timerExerciseInput) timerExerciseInput.value = transcript;
-      toast(`Exercise set: "${transcript}"`);
-    };
-    rec.onend = () => timerVoiceMicBtn.classList.remove("listening");
-    rec.start();
-  });
 }
 
 function formatTime(seconds) {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 function updateTimerDisplay() {
   timerClock.textContent = formatTime(state.timer.secondsRemaining);
   timerPhase.textContent = state.timer.phase;
   const config = getTimerInputs();
-  timerRoundInfo.textContent = `Round ${state.timer.currentRound} / ${config.totalRounds} (${config.exerciseName})`;
+  timerRoundInfo.textContent = `Round ${state.timer.currentRound} / ${config.totalRounds} — ${config.exerciseName}`;
 
   timerPanel.classList.remove("phase-prep", "phase-work", "phase-rest");
   if (state.timer.status !== "stopped") {
@@ -261,7 +228,6 @@ function startTimer() {
     }
     playBoxingBell();
   }
-  
   state.timer.status = "running";
   startTimerBtn.textContent = "RESUME";
   startTimerBtn.disabled = true;
@@ -285,13 +251,14 @@ function resetTimer() {
   state.timer.phase = "READY";
   state.timer.currentRound = 1;
   state.timer.secondsRemaining = 0;
-  
   startTimerBtn.textContent = "START ROUND";
   startTimerBtn.disabled = false;
-  pauseTimerBtn.disabled = false;
-  
-  updateTimerDisplay();
+  pauseTimerBtn.disabled = true;
+  timerPanel.classList.remove("phase-prep", "phase-work", "phase-rest");
+  timerPhase.textContent = "READY";
   timerClock.textContent = "00:00";
+  const config = getTimerInputs();
+  timerRoundInfo.textContent = `Round 1 / ${config.totalRounds}`;
 }
 
 function tickTimer() {
@@ -300,7 +267,6 @@ function tickTimer() {
     updateTimerDisplay();
     return;
   }
-
   playBoxingBell();
   const config = getTimerInputs();
 
@@ -312,9 +278,9 @@ function tickTimer() {
       state.timer.phase = "REST";
       state.timer.secondsRemaining = config.restSec;
     } else {
-      resetTimer();
-      toast("Session Complete! Great fight!");
+      toast("Session complete — logged to today's round. 🔔");
       autoLogTimerSession(config);
+      resetTimer();
       return;
     }
   } else if (state.timer.phase === "REST") {
@@ -327,30 +293,50 @@ function tickTimer() {
 
 async function autoLogTimerSession(config) {
   const dateStr = todayStr();
+  const wasClosed = document.getElementById("logEditor").classList.contains("hidden");
   if (state.selectedDate !== dateStr) selectDate(dateStr);
-  
+
   const entry = {
     id: uid(),
     type: "boxing",
     name: config.exerciseName,
     rounds: config.totalRounds,
-    roundLength: config.workSec / 60
+    roundLength: config.workSec / 60,
   };
-
   state.draftEntries.push(entry);
   renderEntriesList();
 
   state.sessions[dateStr] = {
     entries: state.draftEntries,
     notes: document.getElementById("sessionNotes")?.value || "",
-    updatedAt: Date.now()
+    updatedAt: Date.now(),
   };
 
   recomputeStreak();
   await saveSessions();
   updateStreakUI();
   renderCalendar();
-  toast(`Logged "${entry.name}" & updated streak! 🔥`);
+
+  // If the log panel was closed before the timer finished, close it again so we don't
+  // yank the person into an editor they didn't open — the toast already told them it saved.
+  if (wasClosed) closeLogEditor();
+}
+
+if (timerVoiceMicBtn) {
+  timerVoiceMicBtn.addEventListener("click", () => {
+    if (!voiceSupported()) { toast("Voice recognition isn't available in this browser."); return; }
+    const rec = initRecognizer();
+    rec.continuous = false;
+    timerVoiceMicBtn.classList.add("listening");
+    toast("Say the exercise name…");
+    rec.onresult = (e) => {
+      const transcript = e.results[0][0].transcript;
+      if (timerExerciseInput) timerExerciseInput.value = transcript;
+    };
+    rec.onerror = () => toast("Didn't catch that.");
+    rec.onend = () => timerVoiceMicBtn.classList.remove("listening");
+    rec.start();
+  });
 }
 
 startTimerBtn.addEventListener("click", startTimer);
@@ -358,7 +344,7 @@ pauseTimerBtn.addEventListener("click", pauseTimer);
 resetTimerBtn.addEventListener("click", resetTimer);
 
 /* =========================================================
-   CALENDAR UI
+   CALENDAR
    ========================================================= */
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -394,7 +380,6 @@ function renderCalendar() {
     const num = document.createElement("span");
     num.textContent = day;
     cell.appendChild(num);
-
     if (hasEntry) {
       const dot = document.createElement("span");
       dot.className = "dot";
@@ -415,7 +400,7 @@ document.getElementById("nextMonth").addEventListener("click", () => {
 });
 
 /* =========================================================
-   LOG EDITOR & EXERCISE ENTRIES
+   LOG EDITOR
    ========================================================= */
 function formatDateLong(dateStr) {
   const d = new Date(dateStr + "T00:00:00");
@@ -475,7 +460,7 @@ function renderEntriesList() {
   list.innerHTML = "";
   state.draftEntries.forEach((e) => {
     const row = document.createElement("div");
-    row.className = "entry-row";
+    row.className = `entry-row ${e.type}`;
     const tag = document.createElement("span");
     tag.className = `entry-tag ${e.type}`;
     tag.textContent = e.type;
@@ -494,7 +479,6 @@ function renderEntriesList() {
   });
 }
 
-// Form Switcher logic
 const typeSelect = document.getElementById("manualType");
 typeSelect.addEventListener("change", () => {
   document.getElementById("manualStrengthRow").classList.toggle("hidden", typeSelect.value !== "strength");
@@ -505,7 +489,7 @@ typeSelect.addEventListener("change", () => {
 document.getElementById("manualAddBtn").addEventListener("click", () => {
   const type = typeSelect.value;
   const name = document.getElementById("manualName").value.trim();
-  if (!name) { toast("Give your exercise a name first."); return; }
+  if (!name) { toast("Give it a name first."); return; }
 
   const entry = { id: uid(), type, name, note: document.getElementById("manualNote").value.trim() };
   if (type === "strength") {
@@ -524,7 +508,6 @@ document.getElementById("manualAddBtn").addEventListener("click", () => {
 
   state.draftEntries.push(entry);
   renderEntriesList();
-
   ["manualName","manualSets","manualReps","manualWeight","manualDistance","manualDuration","manualRounds","manualRoundLength","manualNote"]
     .forEach((id) => { document.getElementById(id).value = ""; });
 });
@@ -535,11 +518,7 @@ document.getElementById("saveLogBtn").addEventListener("click", async () => {
   if (state.draftEntries.length === 0 && notes.trim() === "") {
     delete state.sessions[state.selectedDate];
   } else {
-    state.sessions[state.selectedDate] = {
-      entries: state.draftEntries,
-      notes,
-      updatedAt: Date.now(),
-    };
+    state.sessions[state.selectedDate] = { entries: state.draftEntries, notes, updatedAt: Date.now() };
   }
   recomputeStreak();
   await saveSessions();
@@ -550,15 +529,14 @@ document.getElementById("saveLogBtn").addEventListener("click", async () => {
 });
 
 /* =========================================================
-   VOICE PARSER & HANDLERS
+   VOICE PARSING
    ========================================================= */
-const BOXING_WORDS = ["spar","sparring","pads","pad work","bag work","heavy bag","shadow box","shadow boxing","roadwork","skipping","jump rope","mitts","drill","speedbag"];
+const BOXING_WORDS = ["spar","sparring","pads","pad work","bag work","heavy bag","shadow box","shadow boxing","roadwork","road work","skip","skipping","jump rope","mitts","drill","drills","speedbag","speed bag"];
 const CARDIO_WORDS = ["run","ran","running","jog","jogging","cycle","cycling","bike","biking","swim","swimming","row","rowing","walk","walking"];
 
 function parseWorkoutPhrase(text) {
   const original = text.trim();
   let t = " " + original.toLowerCase() + " ";
-
   const entry = { id: uid(), type: "strength", name: null, note: null, transcript: original };
 
   let m = t.match(/(\d+(?:\.\d+)?)\s*(kg|kilo|kilos|kilogram|kilograms)\b/);
@@ -568,20 +546,29 @@ function parseWorkoutPhrase(text) {
     if (m) { entry.weight = parseFloat(m[1]); entry.weightUnit = "lb"; t = t.replace(m[0], " "); }
   }
 
-  m = t.match(/(\d+)\s*(?:x|sets?\s*(?:of)?)\s*(\d+)\s*(?:reps?)?/);
+  // "reps" gets misheard often (rebs/raps/wraps/repps) — accept those as the same word.
+  // Longer/more specific variants must come first, or "repps" partially matches "reps?" and leaves "ps" behind.
+  const REPS_WORD = "(?:repps?|wraps?|rebs?|raps?|reps?)";
+  m = t.match(new RegExp(`(\\d+)\\s*(?:x|sets?\\s*(?:of)?)\\s*(\\d+)\\s*(?:${REPS_WORD}\\b)?`));
   if (m) { entry.sets = parseInt(m[1]); entry.reps = parseInt(m[2]); t = t.replace(m[0], " "); }
   else {
     m = t.match(/(\d+)\s*sets?\b/);
     if (m) { entry.sets = parseInt(m[1]); t = t.replace(m[0], " "); }
-    m = t.match(/(\d+)\s*reps?\b/);
+    m = t.match(new RegExp(`(\\d+)\\s*${REPS_WORD}\\b`));
     if (m) { entry.reps = parseInt(m[1]); t = t.replace(m[0], " "); }
   }
 
   m = t.match(/(\d+)\s*rounds?\b/);
   if (m) { entry.rounds = parseInt(m[1]); t = t.replace(m[0], " "); }
+  m = t.match(/(\d+(?:\.\d+)?)\s*min(?:ute)?s?\s*(?:round|rounds|each)/);
+  if (m) { entry.roundLength = parseFloat(m[1]); t = t.replace(m[0], " "); }
 
   m = t.match(/(\d+(?:\.\d+)?)\s*k(?:m|ilometers?)?\b/);
   if (m) { entry.distance = parseFloat(m[1]); entry.distanceUnit = "km"; t = t.replace(m[0], " "); }
+  else {
+    m = t.match(/(\d+(?:\.\d+)?)\s*mi(?:les?)?\b/);
+    if (m) { entry.distance = parseFloat(m[1]); entry.distanceUnit = "mi"; t = t.replace(m[0], " "); }
+  }
 
   m = t.match(/(\d+(?:\.\d+)?)\s*(?:minutes?|mins?)\b/);
   if (m) { entry.duration = parseFloat(m[1]); t = t.replace(m[0], " "); }
@@ -589,14 +576,11 @@ function parseWorkoutPhrase(text) {
   const lower = original.toLowerCase();
   if (BOXING_WORDS.some((w) => lower.includes(w))) entry.type = "boxing";
   else if (CARDIO_WORDS.some((w) => lower.includes(w)) || entry.distance) entry.type = "cardio";
-  else if (entry.rounds) entry.type = "boxing";
+  else if (entry.rounds || entry.roundLength) entry.type = "boxing";
+  else entry.type = "strength";
 
-  let name = t.replace(/\b(at|of|for|and|then|a|an|the|with|did|do|done)\b/g, " ")
-               .replace(/\d+/g, " ")
-               .replace(/\s+/g, " ")
-               .trim();
-  entry.name = name ? name.replace(/\b\w/g, (c) => c.toUpperCase()) : (entry.type === "boxing" ? "Boxing" : "Exercise");
-
+  let name = t.replace(/\b(at|of|for|and|then|a|an|the|with|did|do|done)\b/g, " ").replace(/\d+/g, " ").replace(/\s+/g, " ").trim();
+  entry.name = name ? name.replace(/\b\w/g, (c) => c.toUpperCase()) : (entry.type === "boxing" ? "Boxing" : entry.type === "cardio" ? "Cardio" : "Exercise");
   return entry;
 }
 
@@ -606,10 +590,9 @@ function splitIntoPhrases(text) {
 
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognizer = null;
-let voiceMode = null; 
+let voiceMode = null;
 
 function voiceSupported() { return !!SpeechRecognitionAPI; }
-
 function initRecognizer() {
   if (!voiceSupported()) return null;
   const r = new SpeechRecognitionAPI();
@@ -618,6 +601,7 @@ function initRecognizer() {
   r.maxAlternatives = 1;
   return r;
 }
+function setVoiceStatus(text) { document.getElementById("voiceStatus").textContent = text; }
 
 function startSummaryMode() {
   if (!voiceSupported()) { toast("Voice recognition isn't available in this browser."); return; }
@@ -626,7 +610,7 @@ function startSummaryMode() {
   voiceMode = "summary";
   const btn = document.getElementById("voiceSummaryBtn");
   btn.classList.add("listening");
-  document.getElementById("voiceStatus").textContent = "Listening… say your full workout, then pause.";
+  setVoiceStatus("Listening… say your whole session, then pause.");
 
   recognizer.onresult = (event) => {
     const transcript = Array.from(event.results).map((r) => r[0].transcript).join(" ");
@@ -637,24 +621,28 @@ function startSummaryMode() {
     }
   };
   recognizer.onerror = () => toast("Didn't catch that — try again.");
-  recognizer.onend = () => { btn.classList.remove("listening"); document.getElementById("voiceStatus").textContent = ""; };
+  recognizer.onend = () => { btn.classList.remove("listening"); setVoiceStatus(""); };
   recognizer.start();
+}
+
+function stopLiveMode() {
+  if (recognizer) { try { recognizer.stop(); } catch {} }
+  document.getElementById("voiceLiveBtn").classList.remove("listening");
+  document.getElementById("voiceLiveBtn").innerHTML = '<span class="mic-dot"></span> Log live';
+  setVoiceStatus("");
+  voiceMode = null;
 }
 
 function startLiveMode() {
   if (!voiceSupported()) { toast("Voice recognition isn't available in this browser."); return; }
-  if (voiceMode === "live") {
-    if (recognizer) recognizer.stop();
-    document.getElementById("voiceLiveBtn").classList.remove("listening");
-    voiceMode = null;
-    return;
-  }
+  if (voiceMode === "live") { stopLiveMode(); return; }
   recognizer = initRecognizer();
   recognizer.continuous = true;
   voiceMode = "live";
   const btn = document.getElementById("voiceLiveBtn");
   btn.classList.add("listening");
-  document.getElementById("voiceStatus").textContent = "Listening — speak each set as you complete it.";
+  btn.innerHTML = '<span class="mic-dot"></span> Stop';
+  setVoiceStatus("Listening — speak each set as you finish it.");
 
   let finalizedUpTo = 0;
   recognizer.onresult = (event) => {
@@ -665,30 +653,70 @@ function startLiveMode() {
           const parsed = parseWorkoutPhrase(phrase);
           state.draftEntries.push(parsed);
           renderEntriesList();
+          setVoiceStatus(`Added: ${entrySummaryText(parsed)}`);
         }
         finalizedUpTo = i + 1;
       }
     }
   };
+  recognizer.onerror = (e) => { if (e.error !== "no-speech") toast("Voice recognition hiccuped."); };
+  recognizer.onend = () => { if (voiceMode === "live") { try { recognizer.start(); } catch {} } };
   recognizer.start();
 }
 
 document.getElementById("voiceSummaryBtn").addEventListener("click", startSummaryMode);
 document.getElementById("voiceLiveBtn").addEventListener("click", startLiveMode);
 
-document.getElementById("voiceQuickBtn").addEventListener("click", () => {
+function quickVoiceLog() {
   selectDate(todayStr());
   startSummaryMode();
-});
+}
+document.getElementById("voiceQuickBtn").addEventListener("click", quickVoiceLog);
+document.getElementById("voiceQuickBtnInline").addEventListener("click", quickVoiceLog);
 
-/* Voice Review Modal Logic */
+/* ---- voice review modal — fully editable before anything saves ---- */
 function openVoiceReview() {
   const list = document.getElementById("voiceReviewList");
   list.innerHTML = "";
   state.voiceReviewDrafts.forEach((e) => {
     const card = document.createElement("div");
     card.className = "voice-review-item";
-    card.innerHTML = `<div style="font-size:0.85rem; font-style:italic;">"${e.transcript}"</div>`;
+
+    const transcript = document.createElement("div");
+    transcript.className = "vr-transcript";
+    transcript.textContent = `"${e.transcript}"`;
+
+    const fields = document.createElement("div");
+    fields.className = "vr-fields";
+
+    const typeSel = document.createElement("select");
+    ["strength","cardio","boxing"].forEach((t) => {
+      const opt = document.createElement("option");
+      opt.value = t; opt.textContent = t;
+      if (t === e.type) opt.selected = true;
+      typeSel.appendChild(opt);
+    });
+    typeSel.addEventListener("change", () => { e.type = typeSel.value; });
+
+    const nameInput = document.createElement("input");
+    nameInput.type = "text"; nameInput.value = e.name || "";
+    nameInput.addEventListener("input", () => { e.name = nameInput.value; });
+    fields.append(typeSel, nameInput);
+
+    const addNumField = (key, placeholder) => {
+      const input = document.createElement("input");
+      input.type = "number"; input.placeholder = placeholder; input.value = e[key] ?? "";
+      input.addEventListener("input", () => { e[key] = Number(input.value) || null; });
+      fields.appendChild(input);
+    };
+    if (e.sets != null || e.reps != null) { addNumField("sets", "Sets"); addNumField("reps", "Reps"); }
+    if (e.weight != null) addNumField("weight", "Weight");
+    if (e.distance != null) addNumField("distance", "Distance");
+    if (e.duration != null) addNumField("duration", "Minutes");
+    if (e.rounds != null) addNumField("rounds", "Rounds");
+    if (e.roundLength != null) addNumField("roundLength", "Min/round");
+
+    card.append(transcript, fields);
     list.appendChild(card);
   });
   document.getElementById("voiceReview").classList.remove("hidden");
@@ -696,45 +724,58 @@ function openVoiceReview() {
 
 document.getElementById("closeVoiceReviewBtn").addEventListener("click", () => {
   document.getElementById("voiceReview").classList.add("hidden");
+  state.voiceReviewDrafts = [];
 });
 
-document.getElementById("confirmVoiceEntriesBtn").addEventListener("click", () => {
+document.getElementById("confirmVoiceEntriesBtn").addEventListener("click", async () => {
   if (!state.selectedDate) selectDate(todayStr());
   state.draftEntries.push(...state.voiceReviewDrafts);
   renderEntriesList();
   document.getElementById("voiceReview").classList.add("hidden");
-  toast("Voice entries added!");
+  state.voiceReviewDrafts = [];
+
+  // Persist immediately so a quick voice log (from the header mic) sticks even if
+  // the person doesn't open the log panel and tap "Save round" themselves.
+  const notes = document.getElementById("sessionNotes")?.value || "";
+  state.sessions[state.selectedDate] = { entries: state.draftEntries, notes, updatedAt: Date.now() };
+  recomputeStreak();
+  await saveSessions();
+  updateStreakUI();
+  renderCalendar();
+  toast("Added and saved.");
 });
 
 /* =========================================================
-   SETTINGS & INITIALIZATION
+   SETTINGS
    ========================================================= */
-let toastTimer = null;
-function toast(msg) {
-  const el = document.getElementById("toast");
-  el.textContent = msg;
-  el.classList.remove("hidden");
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.add("hidden"), 2600);
-}
-
 document.getElementById("settingsBtn").addEventListener("click", () => {
   document.getElementById("settingsDrawer").classList.remove("hidden");
   document.getElementById("voiceSupportStatus").textContent = voiceSupported()
-    ? "Supported" : "Not supported in this browser.";
+    ? "Available in this browser."
+    : "Not supported in this browser — try Chrome or Edge.";
 });
 document.getElementById("closeSettingsBtn").addEventListener("click", () => {
   document.getElementById("settingsDrawer").classList.add("hidden");
 });
 document.getElementById("wipeDataBtn").addEventListener("click", async () => {
-  if (!confirm("Wipe all app data?")) return;
+  if (!confirm("This erases every logged round on this device. Continue?")) return;
   await idbDelete("sessions");
   location.reload();
 });
+
+/* =========================================================
+   SERVICE WORKER + BOOT
+   ========================================================= */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  });
+}
 
 (async function boot() {
   await loadSessions();
   recomputeStreak();
   renderCalendar();
   updateStreakUI();
+  resetTimer();
 })();
