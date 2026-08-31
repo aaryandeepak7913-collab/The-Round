@@ -1,4 +1,4 @@
-const CACHE_NAME = "rounds-tracker-v1";
+const CACHE_NAME = "rounds-tracker-v2";
 const SHELL_FILES = [
   "./",
   "./index.html",
