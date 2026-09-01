@@ -101,7 +101,7 @@ const state = {
   presets: [],
   weighIns: [],
   competition: null,
-  geminiApiKey: null,
+  deepgramApiKey: null,
   timer: {
     status: "stopped",
     phase: "READY",
@@ -709,10 +709,12 @@ function splitIntoPhrases(text) {
 const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognizer = null;
 let voiceMode = null;
+let mediaRecorder = null;
+let audioChunks = [];
 
-function voiceSupported() { return !!SpeechRecognitionAPI; }
+function voiceSupported() { return !!SpeechRecognitionAPI || navigator.mediaDevices?.getUserMedia; }
 function initRecognizer() {
-  if (!voiceSupported()) return null;
+  if (!SpeechRecognitionAPI) return null;
   const r = new SpeechRecognitionAPI();
   r.lang = "en-US";
   r.interimResults = true;
@@ -721,74 +723,62 @@ function initRecognizer() {
 }
 function setVoiceStatus(text) { document.getElementById("voiceStatus").textContent = text; }
 
-/* ---- Gemini-powered parsing (optional — falls back to local regex parsing) ---- */
-// Model names on Google's side change often; if this stops working, swap the string below
-// for whatever current fast/free model Google's docs list at ai.google.dev/api.
-const GEMINI_MODEL = "gemini-2.5-flash";
-
-async function loadGeminiKey() {
-  state.geminiApiKey = await idbGet("geminiApiKey");
+/* ---- Deepgram-powered transcription ---- */
+async function loadDeepgramKey() {
+  state.deepgramApiKey = await idbGet("deepgramApiKey");
 }
 
-async function parseWithGemini(fullTranscript) {
-  const prompt = `You are extracting structured workout data from a spoken training log. The person spoke this entire session in one go, describing multiple exercises back to back.
-
-Transcript: "${fullTranscript}"
-
-Split it into separate exercises/activities. For each one, classify it as exactly one of: "boxing", "strength", "cardio". Extract whatever numeric details were mentioned.
-
-Respond with ONLY a raw JSON array (no markdown fences, no explanation, no surrounding text), where each item has this shape — omit any field that wasn't mentioned:
-[{"type":"strength"|"cardio"|"boxing","name":"string","sets":number,"reps":number,"weight":number,"weightUnit":"kg"|"lb","distance":number,"distanceUnit":"km"|"mi","duration":number,"rounds":number,"roundLength":number}]`;
-
+async function transcribeWithDeepgram(audioBlob) {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
+    "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": state.geminiApiKey },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      headers: {
+        "Authorization": `Token ${state.deepgramApiKey}`,
+        "Content-Type": audioBlob.type || "audio/webm",
+      },
+      body: audioBlob,
     }
   );
-  if (!res.ok) throw new Error(`Gemini API error: ${res.status}`);
+  if (!res.ok) throw new Error(`Deepgram API error: ${res.status}`);
   const data = await res.json();
-  let text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  text = text.replace(/```json/gi, "").replace(/```/g, "").trim();
-  const parsed = JSON.parse(text);
-  if (!Array.isArray(parsed)) throw new Error("Gemini didn't return a list");
-
-  return parsed.map((item) => ({
-    id: uid(),
-    type: ["boxing", "strength", "cardio"].includes(item.type) ? item.type : "strength",
-    name: item.name || null,
-    note: null,
-    sets: item.sets ?? null,
-    reps: item.reps ?? null,
-    weight: item.weight ?? null,
-    weightUnit: item.weightUnit || "kg",
-    distance: item.distance ?? null,
-    distanceUnit: item.distanceUnit || "km",
-    duration: item.duration ?? null,
-    rounds: item.rounds ?? null,
-    roundLength: item.roundLength ?? null,
-    transcript: fullTranscript,
-  }));
+  return data?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
 }
 
 /* ---- Continuous one-shot dictation: keeps listening across pauses until the
    person taps stop, instead of cutting off after the first silence. ---- */
 let summaryTranscriptParts = [];
 
-function startSummaryMode() {
+async function startSummaryMode() {
   if (!voiceSupported()) { toast("Voice recognition isn't available in this browser."); return; }
   if (voiceMode === "summary") { stopSummaryMode(); return; }
 
-  recognizer = initRecognizer();
-  recognizer.continuous = true;
   voiceMode = "summary";
   summaryTranscriptParts = [];
+  audioChunks = [];
   const btn = document.getElementById("voiceSummaryBtn");
   btn.classList.add("listening");
   btn.innerHTML = '<span class="mic-dot"></span> Stop &amp; parse';
   setVoiceStatus("Recording your whole session — talk through every exercise, then tap Stop & parse.");
+
+  if (state.deepgramApiKey && navigator.mediaDevices?.getUserMedia) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+      mediaRecorder.start();
+      return;
+    } catch (err) {
+      console.error(err);
+      toast("Could not access microphone for Deepgram — falling back to Web Speech API.");
+    }
+  }
+
+  recognizer = initRecognizer();
+  if (!recognizer) { toast("Voice recognition isn't available in this browser."); return; }
+  recognizer.continuous = true;
 
   let finalizedUpTo = 0;
   recognizer.onresult = (event) => {
@@ -805,32 +795,42 @@ function startSummaryMode() {
 }
 
 async function stopSummaryMode() {
-  if (recognizer) { try { recognizer.stop(); } catch {} }
-  voiceMode = null;
   const btn = document.getElementById("voiceSummaryBtn");
   btn.classList.remove("listening");
   btn.innerHTML = '<span class="mic-dot"></span> Record whole session';
 
-  const fullTranscript = summaryTranscriptParts.join(" ").trim();
-  if (!fullTranscript) { setVoiceStatus(""); return; }
-
+  let fullTranscript = "";
   const sourceLabel = document.getElementById("voiceReviewSource");
-  if (state.geminiApiKey) {
-    setVoiceStatus("Parsing with Gemini…");
+
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    setVoiceStatus("Transcribing with Deepgram…");
+    await new Promise((resolve) => {
+      mediaRecorder.onstop = resolve;
+      mediaRecorder.stop();
+      mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+    });
+    
+    const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
     try {
-      state.voiceReviewDrafts = await parseWithGemini(fullTranscript);
-      if (sourceLabel) sourceLabel.textContent = "Parsed with Gemini — check these before saving, then tap any field to fix it.";
-      openVoiceReview();
-      setVoiceStatus("");
-      return;
+      fullTranscript = await transcribeWithDeepgram(audioBlob);
     } catch (err) {
       console.error(err);
-      toast("Gemini parsing failed — falling back to local parsing.");
+      toast("Deepgram transcription failed — check API key.");
+      setVoiceStatus("");
+      voiceMode = null;
+      return;
     }
+  } else if (recognizer) {
+    try { recognizer.stop(); } catch {}
+    fullTranscript = summaryTranscriptParts.join(" ").trim();
   }
+
+  voiceMode = null;
+  if (!fullTranscript) { setVoiceStatus(""); return; }
+
   const phrases = splitIntoPhrases(fullTranscript);
   state.voiceReviewDrafts = phrases.map(parseWorkoutPhrase);
-  if (sourceLabel) sourceLabel.textContent = "Check these before saving — voice parsing isn't perfect. Tap any field to fix it.";
+  if (sourceLabel) sourceLabel.textContent = mediaRecorder ? "Transcribed with Deepgram — check these before saving, then tap any field to fix it." : "Check these before saving — voice parsing isn't perfect. Tap any field to fix it.";
   openVoiceReview();
   setVoiceStatus("");
 }
@@ -847,6 +847,7 @@ function startLiveMode() {
   if (!voiceSupported()) { toast("Voice recognition isn't available in this browser."); return; }
   if (voiceMode === "live") { stopLiveMode(); return; }
   recognizer = initRecognizer();
+  if (!recognizer) { toast("Voice recognition isn't available in this browser."); return; }
   recognizer.continuous = true;
   voiceMode = "live";
   const btn = document.getElementById("voiceLiveBtn");
@@ -953,6 +954,44 @@ on("confirmVoiceEntriesBtn", "click", async () => {
   updateStreakUI();
   renderCalendar();
   toast("Added and saved.");
+});
+
+/* =========================================================
+   SETTINGS & DEEPGRAM KEY MANAGEMENT
+   ========================================================= */
+on("settingsBtn", "click", () => {
+  const drawer = document.getElementById("settingsDrawer");
+  drawer.classList.remove("hidden");
+  
+  const statusEl = document.getElementById("voiceSupportStatus");
+  if (statusEl) {
+    statusEl.textContent = voiceSupported()
+      ? "Voice features are supported on this browser."
+      : "Voice features are not supported on this browser.";
+  }
+
+  const keyInput = document.getElementById("deepgramKeyInput");
+  if (keyInput && state.deepgramApiKey) {
+    keyInput.value = state.deepgramApiKey;
+  }
+});
+
+on("closeSettingsBtn", "click", () => {
+  document.getElementById("settingsDrawer").classList.add("hidden");
+});
+
+on("saveDeepgramKeyBtn", "click", async () => {
+  const key = document.getElementById("deepgramKeyInput").value.trim();
+  state.deepgramApiKey = key || null;
+  if (key) {
+    await idbSet("deepgramApiKey", key);
+    document.getElementById("deepgramKeyStatus").textContent = "Key saved successfully.";
+    toast("Deepgram API key saved.");
+  } else {
+    await idbDelete("deepgramApiKey");
+    document.getElementById("deepgramKeyStatus").textContent = "Key removed.";
+    toast("Deepgram API key removed.");
+  }
 });
 
 /* =========================================================
@@ -1143,154 +1182,21 @@ on("addWeightBtn", "click", async () => {
 });
 
 /* =========================================================
-   MONTHLY RECAP
+   INITIALIZATION
    ========================================================= */
-function computeMonthRecap(monthDate) {
-  const year = monthDate.getFullYear(), month = monthDate.getMonth();
-  const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
-  const monthSessions = Object.entries(state.sessions).filter(([date]) => date.startsWith(prefix));
-
-  let daysTrained = 0, boxingRounds = 0, cardioDistanceKm = 0, strengthSets = 0;
-  monthSessions.forEach(([, session]) => {
-    const entries = session.entries || [];
-    if (entries.length > 0) daysTrained++;
-    entries.forEach((e) => {
-      if (e.type === "boxing" && e.rounds) boxingRounds += e.rounds;
-      if (e.type === "cardio" && e.distance) cardioDistanceKm += e.distanceUnit === "mi" ? e.distance * 1.609 : e.distance;
-      if (e.type === "strength" && e.sets) strengthSets += e.sets;
-    });
-  });
-
-  return { daysTrained, boxingRounds, cardioDistanceKm: Math.round(cardioDistanceKm * 10) / 10, strengthSets, longestStreak: state.streak.longest };
-}
-
-function renderRecap() {
-  const stats = computeMonthRecap(state.calendarMonth);
-  document.getElementById("recapMonth").textContent = `${MONTH_NAMES[state.calendarMonth.getMonth()]} ${state.calendarMonth.getFullYear()}`;
-  const grid = document.getElementById("recapGrid");
-  grid.innerHTML = "";
-  const items = [
-    { num: stats.daysTrained, label: "days trained" },
-    { num: stats.boxingRounds, label: "boxing rounds" },
-    { num: stats.cardioDistanceKm, label: "km covered" },
-    { num: stats.strengthSets, label: "strength sets" },
-  ];
-  items.forEach((it) => {
-    const div = document.createElement("div");
-    div.className = "recap-stat";
-    div.innerHTML = `<span class="recap-num">${it.num}</span><span class="recap-label">${it.label}</span>`;
-    grid.appendChild(div);
-  });
-}
-
-on("recapBtn", "click", () => {
-  renderRecap();
-  document.getElementById("recapDrawer").classList.remove("hidden");
-});
-on("closeRecapBtn", "click", () => document.getElementById("recapDrawer").classList.add("hidden"));
-on("downloadRecapBtn", "click", () => {
-  if (typeof html2canvas === "undefined") { toast("Image export isn't available right now."); return; }
-  html2canvas(document.getElementById("recapCard"), { backgroundColor: "#0D0E0F" }).then((canvas) => {
-    const link = document.createElement("a");
-    link.download = `rounds-recap-${todayStr()}.png`;
-    link.href = canvas.toDataURL("image/png");
-    link.click();
-  });
-});
-
-/* =========================================================
-   BACKUP & RESTORE
-   ========================================================= */
-on("downloadBackupBtn", "click", async () => {
-  const backup = {
-    exportedAt: new Date().toISOString(),
-    sessions: state.sessions,
-    presets: state.presets,
-    weighIns: state.weighIns,
-    competition: state.competition,
-  };
-  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `rounds-backup-${todayStr()}.json`;
-  link.click();
-  URL.revokeObjectURL(url);
-  toast("Backup downloaded. Your Gemini key isn't included — re-enter it on the new device.");
-});
-
-on("restoreFileInput", "change", async (event) => {
-  const file = event.target.files[0];
-  if (!file) return;
-  try {
-    const text = await file.text();
-    const data = JSON.parse(text);
-    if (!data.sessions) throw new Error("Not a Rounds backup file");
-    if (!confirm("This replaces everything currently on this device with the backup. Continue?")) return;
-    await idbSet("sessions", data.sessions || {});
-    await idbSet("presets", data.presets || []);
-    await idbSet("weighIns", data.weighIns || []);
-    await idbSet("competition", data.competition || null);
-    toast("Restored — reloading…");
-    setTimeout(() => location.reload(), 800);
-  } catch (err) {
-    console.error(err);
-    toast("Couldn't read that backup file.");
-  }
-});
-
-/* =========================================================
-   SETTINGS
-   ========================================================= */
-on("settingsBtn", "click", () => {
-  document.getElementById("settingsDrawer").classList.remove("hidden");
-  document.getElementById("voiceSupportStatus").textContent = voiceSupported()
-    ? "Available in this browser."
-    : "Not supported in this browser — try Chrome or Edge.";
-  document.getElementById("geminiKeyStatus").textContent = state.geminiApiKey
-    ? "A key is saved on this device."
-    : "No key saved — using local parsing only.";
-});
-on("closeSettingsBtn", "click", () => {
-  document.getElementById("settingsDrawer").classList.add("hidden");
-});
-on("saveGeminiKeyBtn", "click", async () => {
-  const key = document.getElementById("geminiKeyInput").value.trim();
-  if (!key) { toast("Paste a key first."); return; }
-  state.geminiApiKey = key;
-  await idbSet("geminiApiKey", key);
-  document.getElementById("geminiKeyInput").value = "";
-  document.getElementById("geminiKeyStatus").textContent = "A key is saved on this device.";
-  toast("Gemini key saved.");
-});
-on("wipeDataBtn", "click", async () => {
-  if (!confirm("This erases every logged round on this device. Continue?")) return;
-  await idbDelete("sessions");
-  location.reload();
-});
-
-/* =========================================================
-   SERVICE WORKER + BOOT
-   ========================================================= */
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
-  });
-}
-
-(async function boot() {
+async function init() {
   await loadSessions();
+  await loadCompetition();
   await loadPresets();
   await loadWeighIns();
-  await loadCompetition();
-  await loadGeminiKey();
+  await loadDeepgramKey();
   recomputeStreak();
-  renderCalendar();
   updateStreakUI();
-  resetTimer();
+  renderCalendar();
+  renderCountdown();
   renderPresets();
   renderWeightList();
   renderWeightChart();
-  renderCountdown();
-  setInterval(renderCountdown, 60 * 60 * 1000); // refresh once an hour, cheap and enough for a day-granularity countdown
-})();
+}
+
+document.addEventListener("DOMContentLoaded", init);
