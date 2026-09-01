@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0D0E0F" />
+<title>Rounds — training log</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body class="boxing-theme">
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="glove-icon pulse-glove">🥊</span>
+      <span class="brand-text">ROUNDS</span>
+    </div>
+    <div class="streak-card" id="streakCard">
+      <span class="streak-num" id="streakCount">0</span>
+      <span class="streak-label">round streak</span>
+    </div>
+    <div class="topbar-actions">
+      <button class="icon-btn" id="recapBtn" title="Monthly recap">📊</button>
+      <button class="icon-btn" id="voiceQuickBtn" title="Quick voice log">🎙</button>
+      <button class="icon-btn" id="settingsBtn" title="Settings">⚙</button>
+    </div>
+  </header>
+
+  <main class="content">
+
+    <!-- COMPETITION COUNTDOWN -->
+    <section class="countdown-panel" id="countdownPanel">
+      <div class="countdown-display" id="countdownDisplay">
+        <div class="countdown-num" id="countdownNum">—</div>
+        <div class="countdown-label">days until <span id="countdownName">competition</span></div>
+      </div>
+      <button class="icon-btn" id="editCountdownBtn" title="Edit">✎</button>
+      <div class="countdown-edit hidden" id="countdownEdit">
+        <input type="text" id="countdownNameInput" placeholder="Competition name" />
+        <input type="date" id="countdownDateInput" />
+        <button class="btn-secondary" id="saveCountdownBtn">Save</button>
+        <button class="btn-secondary" id="clearCountdownBtn">Clear</button>
+      </div>
+    </section>
+
+    <!-- ROUND TIMER -->
+    <section id="timerPanel" class="timer-panel">
+      <div class="timer-header">
+        <span class="glove-icon">🔔</span>
+        <h2>ROUND TIMER</h2>
+      </div>
+
+      <div class="timer-display-container">
+        <div id="timerPhase" class="timer-phase">READY</div>
+        <div id="timerClock" class="timer-clock">00:00</div>
+        <div id="timerRoundInfo" class="timer-round-info">Round 1 / 1</div>
+      </div>
+
+      <div class="timer-name-row">
+        <input type="text" id="timerExerciseName" placeholder="e.g. Heavy bag, Shadowboxing, Sparring" />
+        <button type="button" id="timerVoiceMicBtn" class="icon-btn timer-mic" title="Speak exercise name">🎤</button>
+      </div>
+
+      <div class="timer-controls">
+        <button id="startTimerBtn" class="btn-primary btn-boxing">START ROUND</button>
+        <button id="pauseTimerBtn" class="btn-secondary" disabled>PAUSE</button>
+        <button id="resetTimerBtn" class="btn-secondary">RESET</button>
+      </div>
+
+      <div class="timer-settings-grid">
+        <div class="setting-item"><label>Prep (sec)</label><input type="number" id="prepTime" value="10" min="0" /></div>
+        <div class="setting-item"><label>Work (min)</label><input type="number" id="workTime" value="3" min="0" step="0.5" /></div>
+        <div class="setting-item"><label>Rest (min)</label><input type="number" id="restTime" value="1" min="0" step="0.5" /></div>
+        <div class="setting-item"><label>Rounds</label><input type="number" id="totalRounds" value="3" min="1" /></div>
+      </div>
+
+      <div class="preset-row">
+        <select id="presetSelect"><option value="">Load a preset…</option></select>
+        <button class="btn-secondary" id="savePresetBtn">Save current as preset</button>
+        <button class="btn-danger" id="deletePresetBtn" title="Delete selected preset">Delete</button>
+      </div>
+    </section>
+
+    <section class="calendar-panel">
+      <div class="calendar-header">
+        <button class="nav-btn" id="prevMonth">‹</button>
+        <h2 id="monthLabel">Month Year</h2>
+        <button class="nav-btn" id="nextMonth">›</button>
+      </div>
+      <div class="weekday-row">
+        <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+
+      <div class="record-card">
+        <div><span class="stat-num" id="currentStreakStat">0</span><span class="stat-label">current streak</span></div>
+        <div><span class="stat-num" id="longestStreakStat">0</span><span class="stat-label">best streak</span></div>
+        <div><span class="stat-num" id="totalSessionsStat">0</span><span class="stat-label">rounds logged</span></div>
+      </div>
+    </section>
+
+    <section class="log-panel" id="logPanel">
+      <div class="log-empty" id="logEmpty">
+        <p>Pick a day to see what happened, or log today's round.</p>
+        <div class="empty-actions">
+          <button class="btn-primary" id="logTodayBtn">Log today</button>
+          <button class="btn-voice" id="voiceQuickBtnInline">
+            <span class="mic-dot"></span> Speak it
+          </button>
+        </div>
+      </div>
+
+      <div class="log-editor hidden" id="logEditor">
+        <div class="log-header">
+          <h3 id="logDateLabel">Today</h3>
+          <button class="icon-btn" id="closeLogBtn">✕</button>
+        </div>
+
+        <div class="voice-bar">
+          <button class="voice-btn" id="voiceSummaryBtn"><span class="mic-dot"></span> Record whole session</button>
+          <button class="voice-btn" id="voiceLiveBtn"><span class="mic-dot"></span> Log live</button>
+          <span class="voice-status" id="voiceStatus"></span>
+        </div>
+
+        <div class="entries-list" id="entriesList"></div>
+
+        <div class="manual-add">
+          <div class="manual-row">
+            <select id="manualType">
+              <option value="boxing">Boxing</option>
+              <option value="strength">Strength</option>
+              <option value="cardio">Cardio</option>
+              <option value="custom">Custom</option>
+            </select>
+            <input type="text" id="manualName" placeholder="e.g. Sparring, Bench press, Roadwork" />
+          </div>
+          <div class="manual-row hidden" id="manualStrengthRow">
+            <input type="number" id="manualSets" placeholder="Sets" min="0" />
+            <input type="number" id="manualReps" placeholder="Reps" min="0" />
+            <input type="number" id="manualWeight" placeholder="Weight" min="0" step="0.5" />
+            <select id="manualWeightUnit"><option value="kg">kg</option><option value="lb">lb</option></select>
+          </div>
+          <div class="manual-row hidden" id="manualCardioRow">
+            <input type="number" id="manualDistance" placeholder="Distance" min="0" step="0.1" />
+            <select id="manualDistanceUnit"><option value="km">km</option><option value="mi">mi</option></select>
+            <input type="number" id="manualDuration" placeholder="Minutes" min="0" />
+          </div>
+          <div class="manual-row" id="manualBoxingRow">
+            <input type="number" id="manualRounds" placeholder="Rounds" min="0" />
+            <input type="number" id="manualRoundLength" placeholder="Round length (min)" min="0" step="0.5" />
+          </div>
+          <div class="manual-row hidden" id="manualCustomRow">
+            <label class="chip"><input type="checkbox" id="customUseSetsReps" /> Sets &amp; reps</label>
+            <label class="chip"><input type="checkbox" id="customUseDuration" /> Duration</label>
+            <label class="chip"><input type="checkbox" id="customUseDistance" /> Distance</label>
+          </div>
+          <div class="manual-row hidden" id="manualCustomSetsRepsRow">
+            <input type="number" id="customSets" placeholder="Sets" min="0" />
+            <input type="number" id="customReps" placeholder="Reps" min="0" />
+          </div>
+          <div class="manual-row hidden" id="manualCustomDurationRow">
+            <input type="number" id="customDuration" placeholder="Duration (min)" min="0" step="0.5" />
+          </div>
+          <div class="manual-row hidden" id="manualCustomDistanceRow">
+            <input type="number" id="customDistance" placeholder="Distance" min="0" step="0.1" />
+            <select id="customDistanceUnit"><option value="km">km</option><option value="mi">mi</option><option value="m">m</option></select>
+          </div>
+          <div class="manual-row">
+            <input type="text" id="manualNote" placeholder="Notes (optional)" />
+            <button class="btn-secondary" id="manualAddBtn">Add entry</button>
+            <button class="btn-secondary hidden" id="cancelEditBtn">Cancel edit</button>
+          </div>
+        </div>
+
+        <textarea id="sessionNotes" placeholder="How did it feel? Anything to remember for next time."></textarea>
+
+        <div class="log-footer">
+          <span class="save-status" id="saveStatus"></span>
+          <button class="btn-primary" id="saveLogBtn">Save round</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- WEIGH-IN TRACKER -->
+    <section class="weight-panel">
+      <h2 class="panel-title">Weigh-ins</h2>
+      <div class="weight-form">
+        <input type="date" id="weightDate" />
+        <input type="number" id="weightValue" placeholder="Weight" min="0" step="0.1" />
+        <select id="weightUnit"><option value="kg">kg</option><option value="lb">lb</option></select>
+        <button class="btn-secondary" id="addWeightBtn">Log</button>
+      </div>
+      <svg id="weightChart" class="weight-chart" viewBox="0 0 400 140" preserveAspectRatio="none"></svg>
+      <div class="weight-list" id="weightList"></div>
+    </section>
+  </main>
+
+  <!-- Voice review modal -->
+  <section id="voiceReview" class="drawer hidden">
+    <div class="drawer-card">
+      <div class="drawer-header">
+        <h2>Here's what I heard</h2>
+        <button class="icon-btn" id="closeVoiceReviewBtn">✕</button>
+      </div>
+      <p class="muted" id="voiceReviewSource">Check these before saving — voice parsing isn't perfect. Tap any field to fix it.</p>
+      <div id="voiceReviewList"></div>
+      <button class="btn-primary" id="confirmVoiceEntriesBtn">Add these to today's round</button>
+    </div>
+  </section>
+
+  <!-- Monthly recap modal -->
+  <section id="recapDrawer" class="drawer hidden">
+    <div class="drawer-card">
+      <div class="drawer-header">
+        <h2>Monthly recap</h2>
+        <button class="icon-btn" id="closeRecapBtn">✕</button>
+      </div>
+      <div class="recap-card" id="recapCard">
+        <div class="recap-month" id="recapMonth">Month Year</div>
+        <div class="recap-grid" id="recapGrid"></div>
+        <div class="recap-footer">ROUNDS 🥊</div>
+      </div>
+      <button class="btn-primary" id="downloadRecapBtn">Download as image</button>
+    </div>
+  </section>
+
+  <!-- Settings drawer -->
+  <section id="settingsDrawer" class="drawer hidden">
+    <div class="drawer-card">
+      <div class="drawer-header">
+        <h2>Settings</h2>
+        <button class="icon-btn" id="closeSettingsBtn">✕</button>
+      </div>
+      <div class="settings-block">
+        <h3>Voice recognition</h3>
+        <p class="muted" id="voiceSupportStatus">Checking device support…</p>
+      </div>
+      <div class="settings-block">
+        <h3>Gemini API key</h3>
+        <p class="muted">Optional. Adds smarter parsing of a full spoken session into separate exercises. Get a free key at Google AI Studio. Stored only on this device.</p>
+        <input type="password" id="geminiKeyInput" placeholder="Paste your Gemini API key" />
+        <button class="btn-secondary" id="saveGeminiKeyBtn">Save key</button>
+        <p class="muted" id="geminiKeyStatus"></p>
+      </div>
+      <div class="settings-block">
+        <h3>Backup &amp; restore</h3>
+        <p class="muted">Download everything on this device so a streak survives a phone switch.</p>
+        <button class="btn-secondary" id="downloadBackupBtn">Download backup</button>
+        <label class="btn-secondary file-btn">
+          Restore from file
+          <input type="file" id="restoreFileInput" accept="application/json" class="hidden" />
+        </label>
+      </div>
+      <div class="settings-block danger-block">
+        <h3>Danger zone</h3>
+        <p class="muted">Erases every logged round on this device. This can't be undone.</p>
+        <button class="btn-danger" id="wipeDataBtn">Erase all data</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
