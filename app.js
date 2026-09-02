@@ -652,9 +652,26 @@ on("saveLogBtn", "click", async () => {
 const BOXING_WORDS = ["spar","sparring","pads","pad work","bag work","heavy bag","shadow box","shadow boxing","roadwork","road work","skip","skipping","jump rope","mitts","drill","drills","speedbag","speed bag"];
 const CARDIO_WORDS = ["run","ran","running","jog","jogging","cycle","cycling","bike","biking","swim","swimming","row","rowing","walk","walking"];
 
+// Spoken numbers sometimes come through as homophones or words instead of digits —
+// "two" in particular is commonly misheard as "to" or "too". Converting these to
+// actual digits before the digit-based regexes below run means both problems disappear at once.
+const NUMBER_WORDS = {
+  zero: 0, one: 1, two: 2, to: 2, too: 2, three: 3, four: 4, five: 5, six: 6, seven: 7,
+  eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14,
+  fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20,
+  thirty: 30, forty: 40, fifty: 50,
+};
+
+function normalizeSpokenNumbers(text) {
+  return text.replace(/\b([a-zA-Z]+)\b/g, (word) => {
+    const lower = word.toLowerCase();
+    return Object.prototype.hasOwnProperty.call(NUMBER_WORDS, lower) ? String(NUMBER_WORDS[lower]) : word;
+  });
+}
+
 function parseWorkoutPhrase(text) {
   const original = text.trim();
-  let t = " " + original.toLowerCase() + " ";
+  let t = " " + normalizeSpokenNumbers(original.toLowerCase()) + " ";
   const entry = { id: uid(), type: "strength", name: null, note: null, transcript: original };
 
   let m = t.match(/(\d+(?:\.\d+)?)\s*(kg|kilo|kilos|kilogram|kilograms)\b/);
@@ -697,7 +714,7 @@ function parseWorkoutPhrase(text) {
   else if (entry.rounds || entry.roundLength) entry.type = "boxing";
   else entry.type = "strength";
 
-  let name = t.replace(/\b(at|of|for|and|then|a|an|the|with|did|do|done)\b/g, " ").replace(/\d+/g, " ").replace(/\s+/g, " ").trim();
+  let name = t.replace(/\b(at|of|for|and|then|next|a|an|the|with|did|do|done)\b/g, " ").replace(/\d+/g, " ").replace(/\s+/g, " ").trim();
   entry.name = name ? name.replace(/\b\w/g, (c) => c.toUpperCase()) : (entry.type === "boxing" ? "Boxing" : entry.type === "cardio" ? "Cardio" : "Exercise");
   return entry;
 }
@@ -745,21 +762,47 @@ async function transcribeWithDeepgram(audioBlob) {
   return data?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
 }
 
-/* ---- Continuous one-shot dictation: keeps listening across pauses until the
-   person taps stop, instead of cutting off after the first silence. ---- */
-let summaryTranscriptParts = [];
+/* ---- Continuous recording, segmented by the spoken word "next": say one exercise,
+   say "next", it's parsed and saved immediately and listening continues with zero
+   gap — no need to stop and restart between exercises. Tap Stop only when fully done
+   (whatever was said since the last "next" is captured as the final entry too). ---- */
+let sessionSegmentBuffer = "";
+
+function tryExtractNextSegment() {
+  const match = sessionSegmentBuffer.match(/\bnext\b/i);
+  if (!match) return null;
+  const before = sessionSegmentBuffer.slice(0, match.index).trim();
+  sessionSegmentBuffer = sessionSegmentBuffer.slice(match.index + match[0].length).trim();
+  return before;
+}
+
+async function addParsedSegment(phrase) {
+  if (!phrase || phrase.trim().length < 2) return;
+  if (!state.selectedDate) selectDate(todayStr());
+  const parsed = parseWorkoutPhrase(phrase);
+  state.draftEntries.push(parsed);
+  renderEntriesList();
+  setVoiceStatus(`Added: ${entrySummaryText(parsed)} — keep going, or tap Stop when you're done.`);
+
+  const notes = document.getElementById("sessionNotes")?.value || "";
+  state.sessions[state.selectedDate] = { entries: state.draftEntries, notes, updatedAt: Date.now() };
+  recomputeStreak();
+  await saveSessions();
+  updateStreakUI();
+  renderCalendar();
+}
 
 async function startSummaryMode() {
   if (!voiceSupported()) { toast("Voice recognition isn't available in this browser."); return; }
   if (voiceMode === "summary") { stopSummaryMode(); return; }
 
   voiceMode = "summary";
-  summaryTranscriptParts = [];
+  sessionSegmentBuffer = "";
   audioChunks = [];
   const btn = document.getElementById("voiceSummaryBtn");
   btn.classList.add("listening");
-  btn.innerHTML = '<span class="mic-dot"></span> Stop &amp; parse';
-  setVoiceStatus("Recording your whole session — talk through every exercise, then tap Stop & parse.");
+  btn.innerHTML = '<span class="mic-dot"></span> Stop';
+  setVoiceStatus('Recording — say one exercise, then say "next" to log it and keep going.');
 
   if (state.deepgramApiKey && navigator.mediaDevices?.getUserMedia) {
     try {
@@ -784,12 +827,19 @@ async function startSummaryMode() {
   recognizer.onresult = (event) => {
     for (let i = finalizedUpTo; i < event.results.length; i++) {
       if (event.results[i].isFinal) {
-        summaryTranscriptParts.push(event.results[i][0].transcript.trim());
+        sessionSegmentBuffer = (sessionSegmentBuffer + " " + event.results[i][0].transcript).trim();
         finalizedUpTo = i + 1;
+
+        let segment;
+        while ((segment = tryExtractNextSegment()) !== null) {
+          addParsedSegment(segment);
+        }
       }
     }
   };
   recognizer.onerror = (e) => { if (e.error !== "no-speech") toast("Voice recognition hiccuped."); };
+  // continuous=true already keeps the mic open across pauses, but some browsers still end
+  // the session on their own after a while — silently restart it if we're still recording.
   recognizer.onend = () => { if (voiceMode === "summary") { try { recognizer.start(); } catch {} } };
   recognizer.start();
 }
@@ -797,10 +847,8 @@ async function startSummaryMode() {
 async function stopSummaryMode() {
   const btn = document.getElementById("voiceSummaryBtn");
   btn.classList.remove("listening");
-  btn.innerHTML = '<span class="mic-dot"></span> Record whole session';
-
-  let fullTranscript = "";
-  const sourceLabel = document.getElementById("voiceReviewSource");
+  btn.innerHTML = '<span class="mic-dot"></span> Record session';
+  voiceMode = null;
 
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     setVoiceStatus("Transcribing with Deepgram…");
@@ -809,29 +857,30 @@ async function stopSummaryMode() {
       mediaRecorder.stop();
       mediaRecorder.stream.getTracks().forEach((track) => track.stop());
     });
-    
     const audioBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+    let fullTranscript = "";
     try {
       fullTranscript = await transcribeWithDeepgram(audioBlob);
     } catch (err) {
       console.error(err);
       toast("Deepgram transcription failed — check API key.");
       setVoiceStatus("");
-      voiceMode = null;
       return;
     }
-  } else if (recognizer) {
-    try { recognizer.stop(); } catch {}
-    fullTranscript = summaryTranscriptParts.join(" ").trim();
+    // Deepgram only gives us the transcript after recording stops, so unlike the
+    // Web Speech path this can't add entries live — it segments by "next" all at once here.
+    const segments = fullTranscript.split(/\bnext\b/i).map((s) => s.trim()).filter((s) => s.length > 2);
+    if (segments.length === 0) { setVoiceStatus(""); toast("Didn't catch anything usable."); return; }
+    for (const seg of segments) await addParsedSegment(seg);
+    toast(`Added ${segments.length} ${segments.length === 1 ? "entry" : "entries"} from Deepgram.`);
+    setVoiceStatus("");
+    return;
   }
 
-  voiceMode = null;
-  if (!fullTranscript) { setVoiceStatus(""); return; }
-
-  const phrases = splitIntoPhrases(fullTranscript);
-  state.voiceReviewDrafts = phrases.map(parseWorkoutPhrase);
-  if (sourceLabel) sourceLabel.textContent = mediaRecorder ? "Transcribed with Deepgram — check these before saving, then tap any field to fix it." : "Check these before saving — voice parsing isn't perfect. Tap any field to fix it.";
-  openVoiceReview();
+  if (recognizer) { try { recognizer.stop(); } catch {} }
+  const leftover = sessionSegmentBuffer.trim();
+  sessionSegmentBuffer = "";
+  if (leftover.length > 2) await addParsedSegment(leftover);
   setVoiceStatus("");
 }
 
@@ -962,7 +1011,7 @@ on("confirmVoiceEntriesBtn", "click", async () => {
 on("settingsBtn", "click", () => {
   const drawer = document.getElementById("settingsDrawer");
   drawer.classList.remove("hidden");
-  
+
   const statusEl = document.getElementById("voiceSupportStatus");
   if (statusEl) {
     statusEl.textContent = voiceSupported()
@@ -1182,6 +1231,109 @@ on("addWeightBtn", "click", async () => {
 });
 
 /* =========================================================
+   MONTHLY RECAP
+   ========================================================= */
+function computeMonthRecap(monthDate) {
+  const year = monthDate.getFullYear(), month = monthDate.getMonth();
+  const prefix = `${year}-${String(month + 1).padStart(2, "0")}`;
+  const monthSessions = Object.entries(state.sessions).filter(([date]) => date.startsWith(prefix));
+
+  let daysTrained = 0, boxingRounds = 0, cardioDistanceKm = 0, strengthSets = 0;
+  monthSessions.forEach(([, session]) => {
+    const entries = session.entries || [];
+    if (entries.length > 0) daysTrained++;
+    entries.forEach((e) => {
+      if (e.type === "boxing" && e.rounds) boxingRounds += e.rounds;
+      if (e.type === "cardio" && e.distance) cardioDistanceKm += e.distanceUnit === "mi" ? e.distance * 1.609 : e.distance;
+      if (e.type === "strength" && e.sets) strengthSets += e.sets;
+    });
+  });
+
+  return { daysTrained, boxingRounds, cardioDistanceKm: Math.round(cardioDistanceKm * 10) / 10, strengthSets, longestStreak: state.streak.longest };
+}
+
+function renderRecap() {
+  const stats = computeMonthRecap(state.calendarMonth);
+  document.getElementById("recapMonth").textContent = `${MONTH_NAMES[state.calendarMonth.getMonth()]} ${state.calendarMonth.getFullYear()}`;
+  const grid = document.getElementById("recapGrid");
+  grid.innerHTML = "";
+  const items = [
+    { num: stats.daysTrained, label: "days trained" },
+    { num: stats.boxingRounds, label: "boxing rounds" },
+    { num: stats.cardioDistanceKm, label: "km covered" },
+    { num: stats.strengthSets, label: "strength sets" },
+  ];
+  items.forEach((it) => {
+    const div = document.createElement("div");
+    div.className = "recap-stat";
+    div.innerHTML = `<span class="recap-num">${it.num}</span><span class="recap-label">${it.label}</span>`;
+    grid.appendChild(div);
+  });
+}
+
+on("recapBtn", "click", () => {
+  renderRecap();
+  document.getElementById("recapDrawer").classList.remove("hidden");
+});
+on("closeRecapBtn", "click", () => document.getElementById("recapDrawer").classList.add("hidden"));
+on("downloadRecapBtn", "click", () => {
+  if (typeof html2canvas === "undefined") { toast("Image export isn't available right now."); return; }
+  html2canvas(document.getElementById("recapCard"), { backgroundColor: "#0D0E0F" }).then((canvas) => {
+    const link = document.createElement("a");
+    link.download = `rounds-recap-${todayStr()}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  });
+});
+
+/* =========================================================
+   BACKUP & RESTORE
+   ========================================================= */
+on("downloadBackupBtn", "click", async () => {
+  const backup = {
+    exportedAt: new Date().toISOString(),
+    sessions: state.sessions,
+    presets: state.presets,
+    weighIns: state.weighIns,
+    competition: state.competition,
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `rounds-backup-${todayStr()}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+  toast("Backup downloaded. Your Deepgram key isn't included — re-enter it on the new device.");
+});
+
+on("restoreFileInput", "change", async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!data.sessions) throw new Error("Not a Rounds backup file");
+    if (!confirm("This replaces everything currently on this device with the backup. Continue?")) return;
+    await idbSet("sessions", data.sessions || {});
+    await idbSet("presets", data.presets || []);
+    await idbSet("weighIns", data.weighIns || []);
+    await idbSet("competition", data.competition || null);
+    toast("Restored — reloading…");
+    setTimeout(() => location.reload(), 800);
+  } catch (err) {
+    console.error(err);
+    toast("Couldn't read that backup file.");
+  }
+});
+
+on("wipeDataBtn", "click", async () => {
+  if (!confirm("This erases every logged round on this device. Continue?")) return;
+  await idbDelete("sessions");
+  location.reload();
+});
+
+/* =========================================================
    INITIALIZATION
    ========================================================= */
 async function init() {
@@ -1197,6 +1349,8 @@ async function init() {
   renderPresets();
   renderWeightList();
   renderWeightChart();
+  resetTimer();
+  setInterval(renderCountdown, 60 * 60 * 1000);
 }
 
 document.addEventListener("DOMContentLoaded", init);
