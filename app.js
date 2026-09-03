@@ -448,35 +448,44 @@ function closeLogEditor() {
 on("logTodayBtn", "click", () => selectDate(todayStr()));
 on("closeLogBtn", "click", closeLogEditor);
 
+function cleanEntryName(name, fallback) {
+  const cleaned = (name || "").replace(/[.,!?;:]+/g, " ").replace(/\s+/g, " ").trim();
+  return cleaned || fallback;
+}
+
 function entrySummaryText(e) {
+  const name = cleanEntryName(e.name, e.type === "boxing" ? "Boxing" : e.type === "cardio" ? "Cardio" : e.type === "custom" ? "Entry" : "Exercise");
+
   if (e.type === "strength") {
     const parts = [];
-    if (e.sets) parts.push(`${e.sets}×${e.reps || "?"}`);
+    if (e.sets && e.reps) parts.push(`${e.sets} sets, ${e.reps} reps`);
+    else if (e.sets) parts.push(`${e.sets} sets`);
     else if (e.reps) parts.push(`${e.reps} reps`);
     if (e.weight) parts.push(`${e.weight}${e.weightUnit || "kg"}`);
-    return `${e.name || "Exercise"} — ${parts.join(" @ ") || "logged"}`;
+    return `${name} - ${parts.join(" at ") || "logged"}`;
   }
   if (e.type === "cardio") {
     const parts = [];
     if (e.distance) parts.push(`${e.distance}${e.distanceUnit || "km"}`);
     if (e.duration) parts.push(`${e.duration} min`);
-    return `${e.name || "Cardio"} — ${parts.join(", ") || "logged"}`;
+    return `${name} - ${parts.join(", ") || "logged"}`;
   }
   if (e.type === "boxing") {
     const parts = [];
     if (e.rounds) parts.push(`${e.rounds} rounds`);
     if (e.roundLength) parts.push(`${e.roundLength} min each`);
-    return `${e.name || "Boxing"} — ${parts.join(", ") || "logged"}`;
+    return `${name} - ${parts.join(", ") || "logged"}`;
   }
   if (e.type === "custom") {
     const parts = [];
-    if (e.sets || e.reps) parts.push(`${e.sets || "?"}×${e.reps || "?"}`);
+    if (e.sets && e.reps) parts.push(`${e.sets} sets, ${e.reps} reps`);
+    else if (e.sets || e.reps) parts.push(`${e.sets || e.reps}`);
     if (e.duration) parts.push(`${e.duration} min`);
     if (e.distance) parts.push(`${e.distance}${e.distanceUnit || ""}`);
     if (e.note && parts.length === 0) parts.push(e.note);
-    return `${e.name || "Entry"} — ${parts.join(", ") || "logged"}`;
+    return `${name} - ${parts.join(", ") || "logged"}`;
   }
-  return e.name || "Entry";
+  return name;
 }
 
 function renderEntriesList() {
@@ -514,7 +523,7 @@ function startEditEntry(e) {
   state.editingEntryId = e.id;
   typeSelect.value = e.type;
   typeSelect.dispatchEvent(new Event("change"));
-  document.getElementById("manualName").value = e.name || "";
+  document.getElementById("manualName").value = cleanEntryName(e.name, "");
   document.getElementById("manualNote").value = e.note || "";
   if (e.type === "strength") {
     document.getElementById("manualSets").value = e.sets ?? "";
@@ -714,7 +723,7 @@ function parseWorkoutPhrase(text) {
   else if (entry.rounds || entry.roundLength) entry.type = "boxing";
   else entry.type = "strength";
 
-  let name = t.replace(/\b(at|of|for|and|then|next|a|an|the|with|did|do|done)\b/g, " ").replace(/\d+/g, " ").replace(/\s+/g, " ").trim();
+  let name = t.replace(/\b(at|of|for|and|then|next|a|an|the|with|did|do|done)\b/g, " ").replace(/\d+/g, " ").replace(/[.,!?;:]+/g, " ").replace(/\s+/g, " ").trim();
   entry.name = name ? name.replace(/\b\w/g, (c) => c.toUpperCase()) : (entry.type === "boxing" ? "Boxing" : entry.type === "cardio" ? "Cardio" : "Exercise");
   return entry;
 }
