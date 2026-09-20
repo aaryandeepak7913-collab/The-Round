@@ -463,6 +463,30 @@ input[type="password"], input[type="date"] {
 .recap-stat .recap-label { font-size: 10.5px; color: var(--mist); text-transform: uppercase; letter-spacing: 0.04em; margin-top: 2px; }
 .recap-footer { font-family: var(--font-display); font-weight: 800; letter-spacing: 0.2em; color: var(--rope-red-bright); font-size: 12px; }
 
+/* ---------- FORM CHECK ---------- */
+.formcheck-panel {
+  background: var(--canvas-raised); border: 1px solid var(--canvas-line);
+  border-radius: var(--radius); padding: 20px; grid-column: 1 / -1;
+  position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 10px;
+}
+.formcheck-panel::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, var(--belt-gold), var(--rope-red), var(--corner-blue));
+}
+.formcheck-filename { font-size: 12px; color: var(--mist); font-family: var(--font-mono); min-height: 16px; }
+.formcheck-panel input[type="text"] {
+  background: var(--canvas); border: 1px solid var(--canvas-line); color: var(--chalk);
+  padding: 10px 12px; border-radius: 8px; font-size: 13.5px;
+}
+.formcheck-status { font-size: 12.5px; color: var(--belt-gold-bright); min-height: 16px; }
+.formcheck-result {
+  margin-top: 4px; background: var(--canvas); border: 1px solid var(--canvas-line);
+  border-radius: 10px; padding: 14px;
+}
+.formcheck-feedback {
+  font-size: 13.5px; line-height: 1.6; color: var(--chalk); white-space: pre-wrap; margin-bottom: 12px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mic-dot, .pulse-glove, .timer-panel.phase-work .timer-display-container { animation: none; }
   .toast { animation: none; }
