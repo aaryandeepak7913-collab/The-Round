@@ -1032,6 +1032,15 @@ on("settingsBtn", "click", () => {
   if (keyInput && state.deepgramApiKey) {
     keyInput.value = state.deepgramApiKey;
   }
+
+  const geminiInput = document.getElementById("geminiKeyInput");
+  if (geminiInput && formCheckState.geminiApiKey) {
+    geminiInput.value = formCheckState.geminiApiKey;
+  }
+  const geminiStatusEl = document.getElementById("geminiKeyStatus");
+  if (geminiStatusEl) {
+    geminiStatusEl.textContent = formCheckState.geminiApiKey ? "A key is saved on this device." : "";
+  }
 });
 
 on("closeSettingsBtn", "click", () => {
@@ -1049,6 +1058,20 @@ on("saveDeepgramKeyBtn", "click", async () => {
     await idbDelete("deepgramApiKey");
     document.getElementById("deepgramKeyStatus").textContent = "Key removed.";
     toast("Deepgram API key removed.");
+  }
+});
+
+on("saveGeminiKeyBtn", "click", async () => {
+  const key = document.getElementById("geminiKeyInput").value.trim();
+  formCheckState.geminiApiKey = key || null;
+  if (key) {
+    await idbSet("geminiApiKey", key);
+    document.getElementById("geminiKeyStatus").textContent = "A key is saved on this device.";
+    toast("Gemini API key saved.");
+  } else {
+    await idbDelete("geminiApiKey");
+    document.getElementById("geminiKeyStatus").textContent = "Key removed.";
+    toast("Gemini API key removed.");
   }
 });
 
@@ -1240,6 +1263,165 @@ on("addWeightBtn", "click", async () => {
 });
 
 /* =========================================================
+   FORM CHECK — Gemini video feedback
+   ========================================================= */
+// Google's model names and API surface change often — confirmed current as of
+// building this. If this stops working, check https://ai.google.dev/gemini-api/docs
+// for the current model name and whether the Interactions API request/response
+// shape below has changed again.
+const GEMINI_MODEL = "gemini-3.5-flash";
+const GEMINI_API_REVISION = "2026-05-20"; // pinned so Google's own changes don't silently break this
+
+let formCheckState = { file: null, geminiApiKey: null };
+
+async function loadGeminiKeyFormCheck() {
+  formCheckState.geminiApiKey = await idbGet("geminiApiKey");
+}
+
+function setFormCheckStatus(text) {
+  const el = document.getElementById("formCheckStatus");
+  if (el) el.textContent = text;
+}
+
+on("formCheckPickBtn", "click", () => document.getElementById("formCheckVideoInput").click());
+
+on("formCheckVideoInput", "change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  formCheckState.file = file;
+  document.getElementById("formCheckFilename").textContent =
+    `${file.name} — ${formatBytesSimple(file.size)}`;
+  document.getElementById("formCheckAnalyzeBtn").disabled = false;
+  document.getElementById("formCheckResult").classList.add("hidden");
+  setFormCheckStatus("");
+});
+
+function formatBytesSimple(bytes) {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/* ---- Files API: resumable upload, then poll until Google finishes processing ---- */
+async function uploadVideoToGemini(file) {
+  const startRes = await fetch(
+    `https://generativelanguage.googleapis.com/upload/v1beta/files`,
+    {
+      method: "POST",
+      headers: {
+        "x-goog-api-key": formCheckState.geminiApiKey,
+        "X-Goog-Upload-Protocol": "resumable",
+        "X-Goog-Upload-Command": "start",
+        "X-Goog-Upload-Header-Content-Length": String(file.size),
+        "X-Goog-Upload-Header-Content-Type": file.type || "video/mp4",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ file: { display_name: file.name } }),
+    }
+  );
+  if (!startRes.ok) throw new Error(`Upload start failed: ${startRes.status}`);
+  const uploadUrl = startRes.headers.get("X-Goog-Upload-URL");
+  if (!uploadUrl) throw new Error("No upload URL returned.");
+
+  const uploadRes = await fetch(uploadUrl, {
+    method: "POST",
+    headers: {
+      "Content-Length": String(file.size),
+      "X-Goog-Upload-Offset": "0",
+      "X-Goog-Upload-Command": "upload, finalize",
+    },
+    body: file,
+  });
+  if (!uploadRes.ok) throw new Error(`Upload failed: ${uploadRes.status}`);
+  const data = await uploadRes.json();
+  return data.file; // { name, uri, mimeType, state, ... }
+}
+
+async function pollUntilActive(fileName) {
+  for (let i = 0; i < 40; i++) { // up to ~3-4 minutes for longer clips
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/${fileName}`,
+      { headers: { "x-goog-api-key": formCheckState.geminiApiKey } }
+    );
+    if (!res.ok) throw new Error(`Status check failed: ${res.status}`);
+    const data = await res.json();
+    if (data.state === "ACTIVE") return data;
+    if (data.state === "FAILED") throw new Error("Google failed to process the video.");
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  throw new Error("Timed out waiting for the video to finish processing.");
+}
+
+async function analyzeVideoWithGemini(fileUri, mimeType, contextText) {
+  const prompt = `You are an experienced boxing coach reviewing a training clip. Watch the video and give specific, constructive feedback on technique — things like stance, guard position, footwork, punch mechanics, head movement, and defense, whatever is actually visible in the clip. Be direct and specific rather than generic. Point out 2-3 concrete things done well and 2-3 concrete things to work on.${contextText ? `\n\nThe athlete asked to focus on: ${contextText}` : ""}`;
+
+  const res = await fetch("https://generativelanguage.googleapis.com/v1beta/interactions", {
+    method: "POST",
+    headers: {
+      "x-goog-api-key": formCheckState.geminiApiKey,
+      "Content-Type": "application/json",
+      "Api-Revision": GEMINI_API_REVISION,
+    },
+    body: JSON.stringify({
+      model: GEMINI_MODEL,
+      input: [
+        { type: "text", text: prompt },
+        { type: "video", uri: fileUri, mime_type: mimeType },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`Gemini API error: ${res.status}`);
+  const data = await res.json();
+
+  const modelStep = (data.steps || []).find((s) => s.type === "model_output");
+  const textBlock = modelStep?.content?.find((c) => c.type === "text");
+  if (!textBlock) throw new Error("No feedback text in the response.");
+  return textBlock.text;
+}
+
+on("formCheckAnalyzeBtn", "click", async () => {
+  if (!formCheckState.geminiApiKey) {
+    toast("Add a Gemini API key in Settings first.");
+    return;
+  }
+  if (!formCheckState.file) { toast("Choose a video first."); return; }
+
+  const btn = document.getElementById("formCheckAnalyzeBtn");
+  btn.disabled = true;
+  document.getElementById("formCheckResult").classList.add("hidden");
+
+  try {
+    setFormCheckStatus("Uploading video…");
+    const uploaded = await uploadVideoToGemini(formCheckState.file);
+
+    setFormCheckStatus("Processing video — this can take a minute or two for longer clips…");
+    const active = await pollUntilActive(uploaded.name);
+
+    setFormCheckStatus("Analyzing your form…");
+    const contextText = document.getElementById("formCheckContext").value.trim();
+    const feedback = await analyzeVideoWithGemini(active.uri, active.mimeType, contextText);
+
+    document.getElementById("formCheckFeedback").textContent = feedback;
+    document.getElementById("formCheckResult").classList.remove("hidden");
+    setFormCheckStatus("Done.");
+  } catch (err) {
+    console.error(err);
+    setFormCheckStatus("");
+    toast(`Form check failed: ${err.message || "unknown error"}`);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+on("formCheckSaveNoteBtn", "click", async () => {
+  const feedback = document.getElementById("formCheckFeedback").textContent;
+  if (!feedback) return;
+  if (!state.selectedDate) selectDate(todayStr());
+  const notesEl = document.getElementById("sessionNotes");
+  notesEl.value = notesEl.value ? `${notesEl.value}\n\nForm check feedback:\n${feedback}` : `Form check feedback:\n${feedback}`;
+  toast('Added — remember to tap "Save round" to keep it.');
+});
+
+/* =========================================================
    MONTHLY RECAP
    ========================================================= */
 function computeMonthRecap(monthDate) {
@@ -1351,6 +1533,7 @@ async function init() {
   await loadPresets();
   await loadWeighIns();
   await loadDeepgramKey();
+  await loadGeminiKeyFormCheck();
   recomputeStreak();
   updateStreakUI();
   renderCalendar();
