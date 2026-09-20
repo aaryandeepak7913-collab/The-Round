@@ -195,6 +195,22 @@
       <svg id="weightChart" class="weight-chart" viewBox="0 0 400 140" preserveAspectRatio="none"></svg>
       <div class="weight-list" id="weightList"></div>
     </section>
+
+    <!-- FORM CHECK: AI video feedback -->
+    <section class="formcheck-panel">
+      <h2 class="panel-title">Form check</h2>
+      <p class="muted">Send a training clip to Gemini for feedback on technique. Requires a free Gemini API key in Settings.</p>
+      <input type="file" id="formCheckVideoInput" accept="video/*" capture="environment" class="hidden" />
+      <button class="btn-secondary" id="formCheckPickBtn">Choose or record a video</button>
+      <p class="formcheck-filename" id="formCheckFilename"></p>
+      <input type="text" id="formCheckContext" placeholder="Optional: what to focus on (e.g. jab technique, footwork)" />
+      <button class="btn-primary" id="formCheckAnalyzeBtn" disabled>Analyze form</button>
+      <p class="formcheck-status" id="formCheckStatus"></p>
+      <div class="formcheck-result hidden" id="formCheckResult">
+        <div class="formcheck-feedback" id="formCheckFeedback"></div>
+        <button class="btn-secondary" id="formCheckSaveNoteBtn">Add to today's notes</button>
+      </div>
+    </section>
   </main>
 
   <!-- Voice review modal -->
@@ -243,6 +259,13 @@
         <input type="password" id="deepgramKeyInput" placeholder="Paste your Deepgram API key" />
         <button class="btn-secondary" id="saveDeepgramKeyBtn">Save key</button>
         <p class="muted" id="deepgramKeyStatus"></p>
+      </div>
+      <div class="settings-block">
+        <h3>Gemini API key (form check)</h3>
+        <p class="muted">Free. Get a key at Google AI Studio. Required for the Form check video feedback feature below. Stored only on this device.</p>
+        <input type="password" id="geminiKeyInput" placeholder="Paste your Gemini API key" />
+        <button class="btn-secondary" id="saveGeminiKeyBtn">Save key</button>
+        <p class="muted" id="geminiKeyStatus"></p>
       </div>
       <div class="settings-block">
         <h3>Backup &amp; restore</h3>
